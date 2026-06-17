@@ -128,17 +128,38 @@
 
                     <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 20px 0;">
 
-                    <!-- Active Routes List -->
-                    <section>
+                    <!-- Calculated Itinerary Options Selector -->
+                    <section class="itinerary-options-section">
                         <div class="route-section-title">
-                            <span>Planned Routes</span>
-                            <span id="route-count" style="font-size: 0.8rem; color: var(--text-muted);">0 routes</span>
+                            <span>Computed Itineraries</span>
+                            <span id="itinerary-option-count" style="font-size: 0.8rem; color: var(--text-muted);">0 options</span>
                         </div>
-                        <div id="routes-list" class="routes-list">
-                            <!-- Dynamically populated -->
+                        <div id="manual-itineraries-list" class="itineraries-list">
+                            <!-- Dynamically populated option cards -->
                             <div class="empty-state">
-                                <i data-lucide="map-pin" style="width: 32px; height: 32px;"></i>
-                                <p>No routes added yet.<br>Fill the form to map your first flight!</p>
+                                <i data-lucide="compass" style="width: 32px; height: 32px;"></i>
+                                <p>No options available.<br>Add flights to auto-calculate routes!</p>
+                            </div>
+                        </div>
+                    </section>
+
+                    <!-- Collapsible Raw Legs List -->
+                    <section class="raw-flights-drawer" style="margin-top: 15px;">
+                        <button type="button" id="btn-toggle-raw-flights" class="drawer-toggle-btn">
+                            <span><i data-lucide="database" style="width: 14px; height: 14px; display: inline-block; vertical-align: middle; margin-right: 4px;"></i> Manage Individual Legs</span>
+                            <i data-lucide="chevron-down" id="raw-flights-chevron" style="width: 14px; height: 14px; transition: transform 0.3s;"></i>
+                        </button>
+                        <div id="raw-flights-container" class="drawer-content collapsed">
+                            <div class="route-section-title" style="margin: 12px 0 6px 0;">
+                                <span>All Legs in Network</span>
+                                <span id="route-count" style="font-size: 0.8rem; color: var(--text-muted);">0 legs</span>
+                            </div>
+                            <div id="routes-list" class="routes-list">
+                                <!-- Dynamically populated raw legs -->
+                                <div class="empty-state">
+                                    <i data-lucide="map-pin" style="width: 32px; height: 32px;"></i>
+                                    <p>No legs added yet.</p>
+                                </div>
                             </div>
                         </div>
                     </section>

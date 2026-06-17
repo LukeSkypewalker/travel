@@ -1,7 +1,9 @@
 // --- State Management ---
 const state = {
     activeMode: 'manual', // 'manual' or 'explorer'
-    routes: [], // Mode 1 manual routes
+    routes: [], // Mode 1 manual flights (raw legs)
+    manualItineraries: [], // Mode 1 auto-calculated itineraries
+    selectedManualItineraryIndex: 0, // Mode 1 active itinerary index
     itineraries: [], // Mode 2 generated itineraries
     selectedItinerary: null, // Mode 2 active itinerary
     playback: {
@@ -14,6 +16,94 @@ const state = {
         lastTickTime: 0
     }
 };
+
+// --- Pathfinder Algorithm for Directed Acyclic Graph of Flights ---
+function findItineraries(flights) {
+    if (!flights || flights.length === 0) return [];
+
+    // Sort flights by departure time
+    const sorted = [...flights].sort((a, b) => a.departureTime - b.departureTime);
+
+    // Find starting flights (sources: flights with no incoming connecting flights)
+    const startingFlights = sorted.filter(f1 => {
+        const hasIncoming = sorted.some(f2 => 
+            getCityCode(f2.destination.name) === getCityCode(f1.origin.name) && 
+            f2.arrivalTime <= f1.departureTime
+        );
+        return !hasIncoming;
+    });
+
+    const itineraries = [];
+
+    function dfs(currentFlight, path) {
+        const lastArrival = currentFlight.arrivalTime;
+        const lastDestCode = getCityCode(currentFlight.destination.name);
+
+        // Find next valid chronological flights
+        const nextFlights = sorted.filter(f => 
+            getCityCode(f.origin.name) === lastDestCode && 
+            f.departureTime >= lastArrival
+        );
+
+        if (nextFlights.length === 0) {
+            // Path completed
+            itineraries.push(buildItineraryObject(path));
+            return;
+        }
+
+        nextFlights.forEach(nextF => {
+            dfs(nextF, [...path, nextF]);
+        });
+    }
+
+    startingFlights.forEach(f => {
+        dfs(f, [f]);
+    });
+
+    // Fallback: If no starting flights found (due to loops), start with all flights
+    if (itineraries.length === 0 && flights.length > 0) {
+        sorted.forEach(f => {
+            dfs(f, [f]);
+        });
+    }
+
+    // Sort itineraries by total price, then by duration
+    itineraries.sort((a, b) => a.totalPrice - b.totalPrice || a.totalDuration - b.totalDuration);
+
+    return itineraries;
+}
+
+function buildItineraryObject(legs) {
+    const totalPrice = legs.reduce((sum, l) => sum + l.price, 0);
+    const totalDuration = legs[legs.length - 1].arrivalTime - legs[0].departureTime;
+    const pathString = [getCityCode(legs[0].origin.name), ...legs.map(l => getCityCode(l.destination.name))].join(' → ');
+    
+    // Build layovers
+    const layovers = [];
+    for (let i = 0; i < legs.length - 1; i++) {
+        const current = legs[i];
+        const next = legs[i + 1];
+        if (next.departureTime > current.arrivalTime) {
+            layovers.push({
+                city: current.destination.name.split(',')[0],
+                code: getCityCode(current.destination.name),
+                startTime: current.arrivalTime,
+                endTime: next.departureTime,
+                lat: current.destination.lat,
+                lng: current.destination.lng
+            });
+        }
+    }
+
+    return {
+        id: `itin-${Math.random().toString(36).substr(2, 5)}`,
+        legs: legs,
+        pathString,
+        totalPrice,
+        totalDuration,
+        layovers
+    };
+}
 
 // --- Airport Coordinates Database (European and Global Hubs) ---
 const AIRPORT_DB = {
@@ -366,6 +456,68 @@ function setupModeToggle() {
     });
 }
 
+function renderManualItinerariesList() {
+    const listContainer = document.getElementById('manual-itineraries-list');
+    const optionCountSpan = document.getElementById('itinerary-option-count');
+    if (!listContainer) return;
+
+    listContainer.innerHTML = '';
+
+    if (state.manualItineraries.length === 0) {
+        listContainer.innerHTML = `
+            <div class="empty-state">
+                <i data-lucide="compass" style="width: 32px; height: 32px;"></i>
+                <p>No itineraries calculated.<br>Add some flight legs to discover connections!</p>
+            </div>
+        `;
+        if (optionCountSpan) optionCountSpan.textContent = '0 options';
+        lucide.createIcons();
+        return;
+    }
+
+    if (optionCountSpan) optionCountSpan.textContent = `${state.manualItineraries.length} options`;
+
+    state.manualItineraries.forEach((itin, index) => {
+        const isActive = index === state.selectedManualItineraryIndex;
+        const card = document.createElement('div');
+        card.className = `itinerary-card ${isActive ? 'active' : ''}`;
+        
+        const durationDays = (itin.totalDuration / (24 * 3600 * 1000)).toFixed(1);
+        const stopsText = itin.legs.length - 1 === 1 ? '1 stopover' : `${itin.legs.length - 1} stopovers`;
+
+        card.innerHTML = `
+            <div class="itinerary-card-header">
+                <span>Option ${index + 1}</span>
+                <span class="itinerary-card-badge">${stopsText}</span>
+            </div>
+            <div class="itinerary-card-path">
+                ${itin.pathString}
+            </div>
+            <div class="itinerary-card-details">
+                <span>Est. Price: <strong style="color: var(--secondary);">$${itin.totalPrice}</strong></span>
+                <span>Duration: <strong>${durationDays} days</strong></span>
+            </div>
+        `;
+
+        card.addEventListener('click', () => {
+            if (state.selectedManualItineraryIndex === index) return;
+            state.selectedManualItineraryIndex = index;
+            
+            // Re-render list to update active card styling
+            renderManualItinerariesList();
+            
+            // Re-draw map active paths
+            drawRoutesOnMap();
+            
+            // Re-draw timeline scale & bounds
+            updateTimelineBounds();
+        });
+
+        listContainer.appendChild(card);
+    });
+    lucide.createIcons();
+}
+
 // --- Mode 1: Manual Planner UI ---
 function renderRoutesList() {
     const container = document.getElementById('routes-list');
@@ -471,7 +623,12 @@ function drawRoutesOnMap() {
     manualLayers.clearLayers();
     if (state.activeMode !== 'manual') return;
 
+    // Get active itinerary legs
+    const activeItin = state.manualItineraries[state.selectedManualItineraryIndex];
+    const activeLegIds = new Set((activeItin?.legs || []).map(l => l.id));
+
     state.routes.forEach(route => {
+        const isActive = activeLegIds.has(route.id);
         const points = generateGeodesicPath(
             route.origin.lat, route.origin.lng,
             route.destination.lat, route.destination.lng,
@@ -479,43 +636,54 @@ function drawRoutesOnMap() {
         );
         const latLngs = points.map(p => L.latLng(p.lat, p.lng));
 
-        // Background line
-        L.polyline(latLngs, {
-            color: route.color,
-            weight: 2,
-            opacity: 0.2,
-            interactive: false
-        }).addTo(manualLayers);
+        if (!isActive) {
+            // Background / alternative leg
+            L.polyline(latLngs, {
+                color: route.color,
+                weight: 2.5,
+                opacity: 0.12,
+                dashArray: '4, 4',
+                interactive: false
+            }).addTo(manualLayers);
+        } else {
+            // Background line (for active path contrast)
+            L.polyline(latLngs, {
+                color: route.color,
+                weight: 2,
+                opacity: 0.25,
+                interactive: false
+            }).addTo(manualLayers);
 
-        // Active dashed path
-        const flightPath = L.polyline(latLngs, {
-            color: route.color,
-            weight: 3.5,
-            opacity: 0.8,
-            dashArray: '8, 8',
-            lineCap: 'round',
-            lineJoin: 'round'
-        }).addTo(manualLayers);
+            // Active path (thick & glowing)
+            const flightPath = L.polyline(latLngs, {
+                color: route.color,
+                weight: 4,
+                opacity: 0.85,
+                dashArray: '8, 8',
+                lineCap: 'round',
+                lineJoin: 'round'
+            }).addTo(manualLayers);
 
-        const depTimeStr = formatDateTime(new Date(route.departureTime));
-        const arrTimeStr = formatDateTime(new Date(route.arrivalTime));
-        flightPath.bindPopup(`
-            <div style="font-family: 'Outfit', sans-serif;">
-                <h4 style="margin: 0 0 6px 0; color: ${route.color}; font-size: 1.05rem;">Flight details</h4>
-                <p style="margin: 4px 0; font-size: 0.85rem;"><strong>From:</strong> ${route.origin.name}</p>
-                <p style="margin: 4px 0; font-size: 0.85rem;"><strong>To:</strong> ${route.destination.name}</p>
-                <p style="margin: 4px 0; font-size: 0.85rem;"><strong>Price:</strong> <span style="color: var(--secondary); font-weight:600;">$${route.price}</span></p>
-                <p style="margin: 4px 0; font-size: 0.85rem;"><strong>Departure:</strong> ${depTimeStr}</p>
-                <p style="margin: 4px 0; font-size: 0.85rem;"><strong>Arrival:</strong> ${arrTimeStr}</p>
-            </div>
-        `);
+            const depTimeStr = formatDateTime(new Date(route.departureTime));
+            const arrTimeStr = formatDateTime(new Date(route.arrivalTime));
+            flightPath.bindPopup(`
+                <div style="font-family: 'Outfit', sans-serif;">
+                    <h4 style="margin: 0 0 6px 0; color: ${route.color}; font-size: 1.05rem;">Flight details</h4>
+                    <p style="margin: 4px 0; font-size: 0.85rem;"><strong>From:</strong> ${route.origin.name}</p>
+                    <p style="margin: 4px 0; font-size: 0.85rem;"><strong>To:</strong> ${route.destination.name}</p>
+                    <p style="margin: 4px 0; font-size: 0.85rem;"><strong>Price:</strong> <span style="color: var(--secondary); font-weight:600;">$${route.price}</span></p>
+                    <p style="margin: 4px 0; font-size: 0.85rem;"><strong>Departure:</strong> ${depTimeStr}</p>
+                    <p style="margin: 4px 0; font-size: 0.85rem;"><strong>Arrival:</strong> ${arrTimeStr}</p>
+                </div>
+            `);
 
-        // Start and end pins
-        L.marker([route.origin.lat, route.origin.lng], { icon: createStartIcon(route.color) })
-            .addTo(manualLayers);
+            // Markers (only for active selected legs)
+            L.marker([route.origin.lat, route.origin.lng], { icon: createStartIcon(route.color) })
+                .addTo(manualLayers);
 
-        L.marker([route.destination.lat, route.destination.lng], { icon: createEndIcon(route.color) })
-            .addTo(manualLayers);
+            L.marker([route.destination.lat, route.destination.lng], { icon: createEndIcon(route.color) })
+                .addTo(manualLayers);
+        }
     });
 }
 
@@ -535,7 +703,12 @@ function addRoute(origin, destination, departureTime, arrivalTime, price, color,
     state.routes.push(route);
     state.routes.sort((a, b) => a.departureTime - b.departureTime);
 
+    // Recalculate manual itineraries from DAG
+    state.manualItineraries = findItineraries(state.routes);
+    state.selectedManualItineraryIndex = 0;
+
     saveRoutesToLocalStorage();
+    renderManualItinerariesList();
     renderRoutesList();
     drawRoutesOnMap();
     updateTimelineBounds();
@@ -549,8 +722,13 @@ function deleteRoute(id) {
             planesLayerGroup.removeLayer(route.planeMarker);
         }
         state.routes.splice(routeIndex, 1);
+
+        // Recalculate manual itineraries from DAG
+        state.manualItineraries = findItineraries(state.routes);
+        state.selectedManualItineraryIndex = 0;
         
         saveRoutesToLocalStorage();
+        renderManualItinerariesList();
         renderRoutesList();
         drawRoutesOnMap();
         updateTimelineBounds();
@@ -916,12 +1094,13 @@ function updateTimelineBounds() {
     };
 
     if (state.activeMode === 'manual') {
-        if (state.routes.length === 0) {
+        const activeItin = state.manualItineraries[state.selectedManualItineraryIndex];
+        if (!activeItin || activeItin.legs.length === 0) {
             resetTimeline();
             return;
         }
-        state.playback.minTime = Math.min(...state.routes.map(r => r.departureTime));
-        state.playback.maxTime = Math.max(...state.routes.map(r => r.arrivalTime));
+        state.playback.minTime = activeItin.legs[0].departureTime;
+        state.playback.maxTime = activeItin.legs[activeItin.legs.length - 1].arrivalTime;
     } else {
         if (!state.selectedItinerary) {
             resetTimeline();
@@ -1027,19 +1206,16 @@ function renderTimelineScale() {
     // --- 2. RENDER LAYOVER STAY BLOCKS ---
     const layovers = [];
     if (state.activeMode === 'manual') {
-        for (let i = 0; i < state.routes.length - 1; i++) {
-            const rCurrent = state.routes[i];
-            const rNext = state.routes[i + 1];
-            if (rNext.departureTime > rCurrent.arrivalTime) {
-                const city = rCurrent.destination.name.split(',')[0];
-                const code = getCityCode(rCurrent.destination.name);
+        const activeItin = state.manualItineraries[state.selectedManualItineraryIndex];
+        if (activeItin) {
+            activeItin.layovers.forEach(lay => {
                 layovers.push({
-                    city: city,
-                    code: code,
-                    start: rCurrent.arrivalTime,
-                    end: rNext.departureTime
+                    city: lay.city,
+                    code: lay.code,
+                    start: lay.startTime,
+                    end: lay.endTime
                 });
-            }
+            });
         }
     } else if (state.selectedItinerary) {
         state.selectedItinerary.layovers.forEach(lay => {
@@ -1073,10 +1249,13 @@ function renderTimelineScale() {
     // --- 3. RENDER CITY TAKEOFF & LANDING MILESTONES (WITH OVERLAP DETECTION) ---
     const events = [];
     if (state.activeMode === 'manual') {
-        state.routes.forEach(r => {
-            events.push({ code: getCityCode(r.origin.name), time: r.departureTime, type: 'dep', color: r.color });
-            events.push({ code: getCityCode(r.destination.name), time: r.arrivalTime, type: 'arr', color: r.color });
-        });
+        const activeItin = state.manualItineraries[state.selectedManualItineraryIndex];
+        if (activeItin) {
+            activeItin.legs.forEach(r => {
+                events.push({ code: getCityCode(r.origin.name), time: r.departureTime, type: 'dep', color: r.color });
+                events.push({ code: getCityCode(r.destination.name), time: r.arrivalTime, type: 'arr', color: r.color });
+            });
+        }
     } else if (state.selectedItinerary) {
         state.selectedItinerary.legs.forEach(l => {
             events.push({ code: l.origin.code, time: l.departureTime, type: 'dep', color: l.color });
@@ -1149,9 +1328,12 @@ function renderTimelineScale() {
     // --- 4. RENDER FLIGHT ARCS (DASHED BEZIER CURVES CONNECTING DEP & ARR) ---
     const flights = [];
     if (state.activeMode === 'manual') {
-        state.routes.forEach(r => {
-            flights.push({ depTime: r.departureTime, arrTime: r.arrivalTime, color: r.color });
-        });
+        const activeItin = state.manualItineraries[state.selectedManualItineraryIndex];
+        if (activeItin) {
+            activeItin.legs.forEach(r => {
+                flights.push({ depTime: r.departureTime, arrTime: r.arrivalTime, color: r.color });
+            });
+        }
     } else if (state.selectedItinerary) {
         state.selectedItinerary.legs.forEach(l => {
             flights.push({ depTime: l.departureTime, arrTime: l.arrivalTime, color: l.color });
@@ -1204,9 +1386,12 @@ function updateAirplanePositions() {
     const currentLabel = document.getElementById('timeline-current-label');
 
     if (state.activeMode === 'manual') {
+        const activeItin = state.manualItineraries[state.selectedManualItineraryIndex];
+        if (!activeItin) return;
+
         let flightActive = false;
         
-        state.routes.forEach((route, idx) => {
+        activeItin.legs.forEach((route, idx) => {
             const dep = route.departureTime;
             const arr = route.arrivalTime;
 
@@ -1235,42 +1420,36 @@ function updateAirplanePositions() {
 
                 const travelTimeStr = formatDateTime(new Date(now));
                 const destCode = getCityCode(route.destination.name);
-                currentLabel.textContent = `${travelTimeStr} (Flight ${idx + 1}/${state.routes.length} to ${destCode})`;
+                currentLabel.textContent = `${travelTimeStr} (Flight ${idx + 1}/${activeItin.legs.length} to ${destCode})`;
             }
         });
 
         if (flightActive) return;
 
         // Check if staying in a city in manual mode
-        for (let i = 0; i < state.routes.length - 1; i++) {
-            const rCurrent = state.routes[i];
-            const rNext = state.routes[i + 1];
-            if (now >= rCurrent.arrivalTime && now <= rNext.departureTime) {
-                const city = rCurrent.destination.name.split(',')[0];
-                const code = getCityCode(rCurrent.destination.name);
-                
-                L.marker([rCurrent.destination.lat, rCurrent.destination.lng], {
+        activeItin.layovers.forEach(lay => {
+            if (now >= lay.startTime && now <= lay.endTime) {
+                L.marker([lay.lat, lay.lng], {
                     icon: createExploringIcon(),
                     zIndexOffset: 1000
                 }).addTo(planesLayerGroup)
                   .bindPopup(`
                       <div style="font-family: 'Outfit', sans-serif;">
                           <h4 style="margin:0 0 4px 0; color: var(--warning);">Sightseeing Stay</h4>
-                          <strong>Exploring:</strong> ${city}<br>
+                          <strong>Exploring:</strong> ${lay.city}<br>
                           <em>Take a photo! Next flight departs soon.</em>
                       </div>
                   `);
 
-                const elapsed = now - rCurrent.arrivalTime;
-                const totalStay = rNext.departureTime - rCurrent.arrivalTime;
+                const elapsed = now - lay.startTime;
+                const totalStay = lay.endTime - lay.startTime;
                 const dayX = Math.floor(elapsed / (24 * 3600 * 1000)) + 1;
                 const totalDays = Math.round(totalStay / (24 * 3600 * 1000));
                 
                 const timeStr = formatDateTime(new Date(now));
-                currentLabel.textContent = `${timeStr} (Exploring ${code}: Day ${dayX}/${totalDays})`;
-                break;
+                currentLabel.textContent = `${timeStr} (Exploring ${lay.code}: Day ${dayX}/${totalDays})`;
             }
-        }
+        });
     } else {
         if (!state.selectedItinerary) return;
 
@@ -1404,6 +1583,19 @@ document.addEventListener('DOMContentLoaded', () => {
     if (sidebar && toggleBtn) {
         toggleBtn.addEventListener('click', () => {
             sidebar.classList.toggle('collapsed');
+        });
+    }
+
+    // Toggle Raw Flights Collapsible Drawer
+    const btnToggleRaw = document.getElementById('btn-toggle-raw-flights');
+    const rawFlightsContainer = document.getElementById('raw-flights-container');
+    const rawFlightsChevron = document.getElementById('raw-flights-chevron');
+    if (btnToggleRaw && rawFlightsContainer) {
+        btnToggleRaw.addEventListener('click', () => {
+            const isCollapsed = rawFlightsContainer.classList.toggle('collapsed');
+            if (rawFlightsChevron) {
+                rawFlightsChevron.style.transform = isCollapsed ? 'rotate(0deg)' : 'rotate(180deg)';
+            }
         });
     }
 
@@ -1665,6 +1857,11 @@ async function insertDemoData() {
                     id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
                     planeMarker: null
                 }));
+                // Run pathfinder for restored routes
+                state.manualItineraries = findItineraries(state.routes);
+                state.selectedManualItineraryIndex = 0;
+
+                renderManualItinerariesList();
                 renderRoutesList();
                 drawRoutesOnMap();
                 updateTimelineBounds();

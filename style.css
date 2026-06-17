@@ -1182,3 +1182,124 @@ input:focus, select:focus {
 #sidebar.collapsed ~ #sidebar-toggle i {
     transform: rotate(180deg);
 }
+
+/* Itinerary Option Cards & Selector styling */
+.itineraries-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 8px;
+    max-height: 250px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.itinerary-card {
+    background: rgba(30, 41, 59, 0.4);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    cursor: pointer;
+    transition: var(--transition);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    position: relative;
+    overflow: hidden;
+}
+
+.itinerary-card:hover {
+    border-color: rgba(255, 255, 255, 0.15);
+    background: rgba(30, 41, 59, 0.55);
+}
+
+.itinerary-card.active {
+    background: rgba(99, 102, 241, 0.1);
+    border-color: var(--primary);
+    box-shadow: 0 0 12px rgba(99, 102, 241, 0.15);
+}
+
+.itinerary-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.itinerary-card-path {
+    font-family: inherit;
+    font-size: 0.92rem;
+    font-weight: 700;
+    color: var(--text-main);
+    letter-spacing: 0.02em;
+}
+
+.itinerary-card-details {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+}
+
+.itinerary-card-badge {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 1px 5px;
+    font-weight: 600;
+}
+
+.itinerary-card.active .itinerary-card-badge {
+    background: rgba(99, 102, 241, 0.2);
+    border-color: rgba(99, 102, 241, 0.4);
+    color: var(--text-accent);
+}
+
+/* Collapsible Drawer Styles */
+.raw-flights-drawer {
+    border: 1px solid var(--border-color);
+    background: rgba(15, 23, 42, 0.3);
+    border-radius: var(--radius);
+    overflow: hidden;
+    transition: var(--transition);
+}
+
+.drawer-toggle-btn {
+    width: 100%;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    font-family: inherit;
+    font-size: 0.82rem;
+    font-weight: 600;
+    padding: 12px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.drawer-toggle-btn:hover {
+    color: var(--text-main);
+    background: rgba(255, 255, 255, 0.02);
+}
+
+.drawer-content {
+    max-height: 500px;
+    padding: 0 14px 14px 14px;
+    border-top: 1px solid var(--border-color);
+    overflow-y: auto;
+    transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1), padding 0.4s, opacity 0.4s;
+    opacity: 1;
+}
+
+.drawer-content.collapsed {
+    max-height: 0px;
+    padding-top: 0px;
+    padding-bottom: 0px;
+    border-top-color: transparent;
+    opacity: 0;
+    pointer-events: none;
+}

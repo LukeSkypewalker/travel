@@ -743,69 +743,6 @@ function renderManualItinerariesList() {
             openEditPanel('manual');
         });
 
-        // Show route details on mouse hover tooltip next to the card
-        card.addEventListener('mouseenter', (e) => {
-            state.hoveredManualItineraryIndex = index;
-            drawRoutesOnMap();
-
-            const tooltip = document.createElement('div');
-            tooltip.className = 'route-hover-tooltip';
-            
-            let html = '<div class="tooltip-title">Route Details</div>';
-            itin.legs.forEach((leg, idx) => {
-                const depDate = new Date(leg.departureTime);
-                const arrDate = new Date(leg.arrivalTime);
-                const formatTooltipDate = (d) => {
-                    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                    const pad = (num) => num.toString().padStart(2, '0');
-                    return `${d.getDate()} ${months[d.getMonth()]} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-                };
-                
-                html += `
-                    <div class="tooltip-leg" style="border-left: 2.5px solid ${leg.color}; padding-left: 8px; margin-bottom: 6px;">
-                        <div style="font-weight: 700; font-size: 0.82rem; color: var(--text-main); margin-bottom: 2px;">
-                            ${getCityCode(leg.origin.name)} → ${getCityCode(leg.destination.name)}
-                        </div>
-                        <div style="font-size: 0.72rem; color: var(--text-muted); line-height: 1.35;">
-                            Dep: ${formatTooltipDate(depDate)}<br>
-                            Arr: ${formatTooltipDate(arrDate)}
-                        </div>
-                        <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 600; margin-top: 1px;">
-                            Price: $${leg.price}
-                        </div>
-                    </div>
-                `;
-                
-                const nextLeg = itin.legs[idx + 1];
-                if (nextLeg && nextLeg.departureTime > leg.arrivalTime) {
-                    const layoverMs = nextLeg.departureTime - leg.arrivalTime;
-                    const days = (layoverMs / (24 * 3600 * 1000)).toFixed(1);
-                    html += `
-                        <div style="font-size: 0.7rem; color: var(--warning); margin-bottom: 6px; padding-left: 10px; display: flex; align-items: center; gap: 4px;">
-                            <i data-lucide="clock" style="width: 11px; height: 11px; opacity: 0.85;"></i>
-                            <span>Layover: ${days} days</span>
-                        </div>
-                    `;
-                }
-            });
-            
-            tooltip.innerHTML = html;
-            document.body.appendChild(tooltip);
-            
-            const rect = card.getBoundingClientRect();
-            tooltip.style.position = 'fixed';
-            tooltip.style.top = `${rect.top}px`;
-            tooltip.style.left = `${rect.right + 10}px`;
-            tooltip.style.zIndex = '9999';
-            
-            lucide.createIcons();
-            
-            card.addEventListener('mouseleave', () => {
-                tooltip.remove();
-                state.hoveredManualItineraryIndex = null;
-                drawRoutesOnMap();
-            }, { once: true });
-        });
 
         listContainer.appendChild(card);
     });

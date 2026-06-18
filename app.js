@@ -556,23 +556,8 @@ function renderItineraryDetails() {
             <div class="details-legs-list">
                 ${legsHTML}
             </div>
-
-            <div class="details-actions" style="margin-top: 5px; display: flex; gap: 10px;">
-                <button type="button" id="btn-add-leg-trigger" class="btn btn-primary" style="flex: 1; padding: 10px; font-size: 0.82rem; display: inline-flex; justify-content: center; align-items: center; gap: 6px;">
-                    <i data-lucide="plus-circle" style="width: 15px; height: 15px;"></i>
-                    Add Flight Leg
-                </button>
-            </div>
         </div>
     `;
-
-    // Bind event listeners
-    const addLegTrigger = document.getElementById('btn-add-leg-trigger');
-    if (addLegTrigger) {
-        addLegTrigger.addEventListener('click', () => {
-            showLegForm(null);
-        });
-    }
 
     editManual.querySelectorAll('.btn-edit-leg').forEach(btn => {
         btn.addEventListener('click', () => {
@@ -594,13 +579,21 @@ function renderItineraryDetails() {
 function showLegForm(legId) {
     const formPanel = document.getElementById('form-panel');
     const editPanel = document.getElementById('edit-panel');
+    const leftPanel = document.getElementById('left-panel');
     const formContainer = document.getElementById('edit-manual-form-container');
     const formTitle = document.getElementById('manual-form-title');
     const submitBtn = document.getElementById('btn-submit-route');
 
     if (formPanel) {
         formPanel.classList.remove('collapsed');
-        if (editPanel) editPanel.classList.add('form-open');
+        if (editPanel) {
+            editPanel.classList.remove('collapsed');
+            editPanel.classList.add('form-open');
+        }
+        if (leftPanel) {
+            leftPanel.classList.add('edit-open');
+        }
+        renderItineraryDetails();
     }
 
     if (!formContainer) return;
@@ -2058,6 +2051,14 @@ document.addEventListener('DOMContentLoaded', () => {
     if (btnCloseForm) {
         btnCloseForm.addEventListener('click', () => {
             closeFormPanel();
+        });
+    }
+
+    // Add Flight Leg Left Button
+    const btnAddLegLeft = document.getElementById('btn-add-leg-left');
+    if (btnAddLegLeft) {
+        btnAddLegLeft.addEventListener('click', () => {
+            showLegForm(null);
         });
     }
 

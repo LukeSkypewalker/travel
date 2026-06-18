@@ -26,9 +26,14 @@
                     <section class="itinerary-options-section" style="padding: 20px 20px 10px 20px;">
                         <div class="route-section-title" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
                             <span>Routes</span>
-                            <button type="button" id="btn-update-prices-left" class="btn-action" title="Update Prices Data">
-                                <i data-lucide="refresh-cw" style="width: 14px; height: 14px;"></i>
-                            </button>
+                            <div style="display: flex; gap: 8px; align-items: center;">
+                                <button type="button" id="btn-add-leg-left" class="btn btn-primary" style="padding: 6px 12px; font-size: 0.75rem; display: inline-flex; align-items: center; gap: 4px; border-radius: 6px;">
+                                    <i data-lucide="plus-circle" style="width: 12px; height: 12px;"></i> Add Flight Leg
+                                </button>
+                                <button type="button" id="btn-update-prices-left" class="btn-action" title="Update Prices Data">
+                                    <i data-lucide="refresh-cw" style="width: 14px; height: 14px;"></i>
+                                </button>
+                            </div>
                         </div>
                         <div id="manual-itineraries-list" class="itineraries-list">
                             <!-- Dynamically populated option cards -->

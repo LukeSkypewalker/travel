@@ -420,6 +420,8 @@ function setupModeToggle() {
     const tabs = document.querySelectorAll('.mode-tab');
     const manualContainer = document.getElementById('mode-manual-container');
     const explorerContainer = document.getElementById('mode-explorer-container');
+    const leftManualContainer = document.getElementById('left-manual-container');
+    const leftExplorerContainer = document.getElementById('left-explorer-container');
 
     tabs.forEach(tab => {
         tab.addEventListener('click', () => {
@@ -434,6 +436,8 @@ function setupModeToggle() {
             if (mode === 'manual') {
                 manualContainer.classList.add('active');
                 explorerContainer.classList.remove('active');
+                if (leftManualContainer) leftManualContainer.classList.add('active');
+                if (leftExplorerContainer) leftExplorerContainer.classList.remove('active');
                 
                 map.removeLayer(explorerLayers);
                 map.addLayer(manualLayers);
@@ -444,6 +448,8 @@ function setupModeToggle() {
             } else {
                 explorerContainer.classList.add('active');
                 manualContainer.classList.remove('active');
+                if (leftExplorerContainer) leftExplorerContainer.classList.add('active');
+                if (leftManualContainer) leftManualContainer.classList.remove('active');
                 
                 map.removeLayer(manualLayers);
                 map.addLayer(explorerLayers);
@@ -645,6 +651,25 @@ function drawRoutesOnMap() {
                 dashArray: '4, 4',
                 interactive: false
             }).addTo(manualLayers);
+
+            // Directional arrow at midpoint
+            const midIdx = Math.floor(points.length / 2);
+            const midPoint = points[midIdx];
+            const nextPoint = points[midIdx + 1];
+            const bearing = getBearing(midPoint.lat, midPoint.lng, nextPoint.lat, nextPoint.lng);
+            L.marker([midPoint.lat, midPoint.lng], {
+                icon: L.divIcon({
+                    className: 'map-arrow-icon-wrapper',
+                    html: `<div style="transform: rotate(${bearing}deg); width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; pointer-events: none;">
+                             <svg viewBox="0 0 24 24" width="10" height="10" fill="${route.color}" opacity="0.2">
+                                 <polygon points="12,2 22,22 12,17 2,22" />
+                             </svg>
+                           </div>`,
+                    iconSize: [16, 16],
+                    iconAnchor: [8, 8]
+                }),
+                interactive: false
+            }).addTo(manualLayers);
         } else {
             // Background line (for active path contrast)
             L.polyline(latLngs, {
@@ -662,6 +687,25 @@ function drawRoutesOnMap() {
                 dashArray: '8, 8',
                 lineCap: 'round',
                 lineJoin: 'round'
+            }).addTo(manualLayers);
+
+            // Directional arrow at midpoint
+            const midIdx = Math.floor(points.length / 2);
+            const midPoint = points[midIdx];
+            const nextPoint = points[midIdx + 1];
+            const bearing = getBearing(midPoint.lat, midPoint.lng, nextPoint.lat, nextPoint.lng);
+            L.marker([midPoint.lat, midPoint.lng], {
+                icon: L.divIcon({
+                    className: 'map-arrow-icon-wrapper',
+                    html: `<div style="transform: rotate(${bearing}deg); width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; pointer-events: none;">
+                             <svg viewBox="0 0 24 24" width="12" height="12" fill="${route.color}" opacity="0.85">
+                                 <polygon points="12,2 22,22 12,17 2,22" />
+                             </svg>
+                           </div>`,
+                    iconSize: [16, 16],
+                    iconAnchor: [8, 8]
+                }),
+                interactive: false
             }).addTo(manualLayers);
 
             const depTimeStr = formatDateTime(new Date(route.departureTime));
@@ -1034,6 +1078,25 @@ function drawSelectedItineraryOnMap() {
             dashArray: '8, 8',
             lineCap: 'round',
             lineJoin: 'round'
+        }).addTo(explorerLayers);
+
+        // Directional arrow at midpoint
+        const midIdx = Math.floor(points.length / 2);
+        const midPoint = points[midIdx];
+        const nextPoint = points[midIdx + 1];
+        const bearing = getBearing(midPoint.lat, midPoint.lng, nextPoint.lat, nextPoint.lng);
+        L.marker([midPoint.lat, midPoint.lng], {
+            icon: L.divIcon({
+                className: 'map-arrow-icon-wrapper',
+                html: `<div style="transform: rotate(${bearing}deg); width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; pointer-events: none;">
+                         <svg viewBox="0 0 24 24" width="12" height="12" fill="${leg.color}" opacity="0.85">
+                             <polygon points="12,2 22,22 12,17 2,22" />
+                         </svg>
+                       </div>`,
+                iconSize: [16, 16],
+                iconAnchor: [8, 8]
+            }),
+            interactive: false
         }).addTo(explorerLayers);
 
         const depTimeStr = formatDateTime(new Date(leg.departureTime));
@@ -1583,6 +1646,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if (sidebar && toggleBtn) {
         toggleBtn.addEventListener('click', () => {
             sidebar.classList.toggle('collapsed');
+        });
+    }
+
+    // Toggle Left Panel fold/unfold state
+    const leftPanel = document.getElementById('left-panel');
+    const leftToggleBtn = document.getElementById('left-panel-toggle');
+    if (leftPanel && leftToggleBtn) {
+        leftToggleBtn.addEventListener('click', () => {
+            leftPanel.classList.toggle('collapsed');
         });
     }
 

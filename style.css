@@ -1189,7 +1189,7 @@ input:focus, select:focus {
     flex-direction: column;
     gap: 10px;
     margin-top: 8px;
-    max-height: 250px;
+    max-height: calc(100vh - 220px);
     overflow-y: auto;
     padding-right: 4px;
 }
@@ -1302,4 +1302,97 @@ input:focus, select:focus {
     border-top-color: transparent;
     opacity: 0;
     pointer-events: none;
+}
+
+/* Left Panel Styles */
+#left-panel {
+    position: absolute;
+    left: 20px;
+    top: 20px;
+    bottom: 120px;
+    width: 360px;
+    background: var(--bg-sidebar);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-main);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: var(--transition);
+}
+
+.left-panel-content {
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.left-mode-container {
+    display: none;
+    flex-direction: column;
+    gap: 20px;
+    padding: 0;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.left-mode-container.active {
+    display: flex;
+}
+
+#left-panel-toggle {
+    position: absolute;
+    left: 380px; /* Aligns flush with expanded left-panel (20px gap + 360px width) */
+    top: 40px;
+    width: 36px;
+    height: 40px;
+    background: var(--bg-sidebar);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--border-color);
+    border-left: none;
+    border-radius: 0 8px 8px 0;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition);
+    z-index: 101;
+    box-shadow: 4px 0 16px rgba(0, 0, 0, 0.25);
+}
+
+#left-panel-toggle:hover {
+    color: var(--text-main);
+    background: rgba(15, 23, 42, 0.9);
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+#left-panel-toggle i {
+    width: 18px;
+    height: 18px;
+    transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Left Panel Foldable States */
+#left-panel.collapsed {
+    transform: translateX(calc(-100% - 20px));
+}
+
+#left-panel.collapsed ~ #left-panel-toggle {
+    transform: translateX(-380px);
+}
+
+#left-panel.collapsed ~ #left-panel-toggle i {
+    transform: rotate(180deg);
+}
+
+/* Map Directional Arrows */
+.map-arrow-icon-wrapper {
+    background: none !important;
+    border: none !important;
 }

@@ -17,6 +17,48 @@
         <!-- Leaflet Map Container -->
         <div id="map"></div>
 
+        <!-- Left Panel for Calculated/Suggested Itineraries -->
+        <aside id="left-panel">
+            <div class="left-panel-content">
+                <!-- Mode 1: Computed Itineraries -->
+                <div id="left-manual-container" class="left-mode-container active">
+                    <section class="itinerary-options-section" style="padding: 20px;">
+                        <div class="route-section-title">
+                            <span>Computed Itineraries</span>
+                            <span id="itinerary-option-count" style="font-size: 0.8rem; color: var(--text-muted);">0 options</span>
+                        </div>
+                        <div id="manual-itineraries-list" class="itineraries-list">
+                            <!-- Dynamically populated option cards -->
+                            <div class="empty-state">
+                                <i data-lucide="compass" style="width: 32px; height: 32px;"></i>
+                                <p>No options available.<br>Add flights to auto-calculate routes!</p>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Mode 2: Suggested Stopovers -->
+                <div id="left-explorer-container" class="left-mode-container">
+                    <section style="padding: 20px;">
+                        <div class="route-section-title">
+                            <span>Suggested Stopovers</span>
+                            <span id="itinerary-count" style="font-size: 0.8rem; color: var(--text-muted);">0 routes</span>
+                        </div>
+                        <div id="itineraries-list" class="routes-list">
+                            <div class="empty-state">
+                                <i data-lucide="sparkles" style="width: 32px; height: 32px;"></i>
+                                <p>Search to generate stopover flights.<br>We'll find cheap multi-hop options with 1–3 day layovers!</p>
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+        </aside>
+
+        <button id="left-panel-toggle" aria-label="Toggle Left Panel" title="Collapse/Expand Panel">
+            <i data-lucide="chevron-left"></i>
+        </button>
+
         <!-- Sidebar Panel for Configuration & List -->
         <aside id="sidebar">
             <!-- Mode Toggle Tabs -->
@@ -126,22 +168,7 @@
                         </form>
                     </section>
 
-                    <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 20px 0;">
 
-                    <!-- Calculated Itinerary Options Selector -->
-                    <section class="itinerary-options-section">
-                        <div class="route-section-title">
-                            <span>Computed Itineraries</span>
-                            <span id="itinerary-option-count" style="font-size: 0.8rem; color: var(--text-muted);">0 options</span>
-                        </div>
-                        <div id="manual-itineraries-list" class="itineraries-list">
-                            <!-- Dynamically populated option cards -->
-                            <div class="empty-state">
-                                <i data-lucide="compass" style="width: 32px; height: 32px;"></i>
-                                <p>No options available.<br>Add flights to auto-calculate routes!</p>
-                            </div>
-                        </div>
-                    </section>
 
                     <!-- Collapsible Raw Legs List -->
                     <section class="raw-flights-drawer" style="margin-top: 15px;">
@@ -223,21 +250,7 @@
                         </form>
                     </section>
 
-                    <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 20px 0;">
 
-                    <!-- Generated Itineraries List -->
-                    <section>
-                        <div class="route-section-title">
-                            <span>Suggested Stopovers</span>
-                            <span id="itinerary-count" style="font-size: 0.8rem; color: var(--text-muted);">0 routes</span>
-                        </div>
-                        <div id="itineraries-list" class="routes-list">
-                            <div class="empty-state">
-                                <i data-lucide="sparkles" style="width: 32px; height: 32px;"></i>
-                                <p>Search to generate stopover flights.<br>We'll find cheap multi-hop options with 1–3 day layovers!</p>
-                            </div>
-                        </div>
-                    </section>
                 </div>
             </div>
         </aside>

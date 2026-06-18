@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RouteWeaver - Interactive Travel Map & Timeline</title>
+    <title>Interactive Travel Map & Timeline</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236366f1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cpolygon points='16.24,7.76 14.12,14.12 7.76,16.24 9.88,9.88'/%3E%3C/svg%3E" />
     <!-- Leaflet CSS -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" 
           integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
@@ -19,25 +20,15 @@
 
         <!-- Left Panel for Calculated/Suggested Itineraries -->
         <aside id="left-panel">
-            <!-- Mode Toggle Tabs -->
-            <div class="mode-tabs">
-                <button class="mode-tab active" data-mode="manual">
-                    <i data-lucide="edit-3" style="width: 16px; height: 16px;"></i>
-                    Manual Planner
-                </button>
-                <button class="mode-tab" data-mode="explorer">
-                    <i data-lucide="sparkles" style="width: 16px; height: 16px;"></i>
-                    Route Explorer
-                </button>
-            </div>
-
             <div class="left-panel-content">
                 <!-- Mode 1: Computed Itineraries -->
                 <div id="left-manual-container" class="left-mode-container active">
                     <section class="itinerary-options-section" style="padding: 20px 20px 10px 20px;">
-                        <div class="route-section-title">
-                            <span>Computed Itineraries</span>
-                            <span id="itinerary-option-count" style="font-size: 0.8rem; color: var(--text-muted);">0 options</span>
+                        <div class="route-section-title" style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+                            <span>Routes</span>
+                            <button type="button" id="btn-update-prices-left" class="btn-action" title="Update Prices Data">
+                                <i data-lucide="refresh-cw" style="width: 14px; height: 14px;"></i>
+                            </button>
                         </div>
                         <div id="manual-itineraries-list" class="itineraries-list">
                             <!-- Dynamically populated option cards -->
@@ -48,71 +39,49 @@
                         </div>
                     </section>
 
-                    <!-- Collapsible Raw Legs List (Moved to the left!) -->
-                    <section class="raw-flights-drawer" style="margin: 0 20px 20px 20px;">
-                        <button type="button" id="btn-toggle-raw-flights" class="drawer-toggle-btn">
-                            <span><i data-lucide="database" style="width: 14px; height: 14px; display: inline-block; vertical-align: middle; margin-right: 4px;"></i> Manage Individual Legs</span>
-                            <i data-lucide="chevron-down" id="raw-flights-chevron" style="width: 14px; height: 14px; transition: transform 0.3s;"></i>
-                        </button>
-                        <div id="raw-flights-container" class="drawer-content collapsed">
-                            <div class="route-section-title" style="margin: 12px 0 6px 0;">
-                                <span>All Legs in Network</span>
-                                <span id="route-count" style="font-size: 0.8rem; color: var(--text-muted);">0 legs</span>
-                            </div>
-                            <div id="routes-list" class="routes-list">
-                                <!-- Dynamically populated raw legs -->
-                                <div class="empty-state">
-                                    <i data-lucide="map-pin" style="width: 32px; height: 32px;"></i>
-                                    <p>No legs added yet.</p>
-                                </div>
-                            </div>
-                        </div>
-                    </section>
+
                 </div>
 
-                <!-- Mode 2: Suggested Stopovers -->
-                <div id="left-explorer-container" class="left-mode-container">
-                    <section style="padding: 20px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                            <span class="route-section-title" style="margin: 0;">Suggested Stopovers</span>
-                            <button type="button" id="btn-configure-search" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.78rem; gap: 4px; display: inline-flex; align-items: center; border-radius: 6px;">
-                                <i data-lucide="sliders" style="width: 12px; height: 12px;"></i>
-                                Search Params
-                            </button>
-                        </div>
-                        
-                        <div class="route-section-title">
-                            <span>Results</span>
-                            <span id="itinerary-count" style="font-size: 0.8rem; color: var(--text-muted);">0 routes</span>
-                        </div>
-                        <div id="itineraries-list" class="routes-list">
-                            <div class="empty-state">
-                                <i data-lucide="sparkles" style="width: 32px; height: 32px;"></i>
-                                <p>Search to generate stopover flights.<br>We'll find cheap multi-hop options with 1–3 day layovers!</p>
-                            </div>
-                        </div>
-                    </section>
-                </div>
+
             </div>
         </aside>
-
-        <button id="left-panel-toggle" aria-label="Toggle Left Panel" title="Collapse/Expand Panel">
-            <i data-lucide="chevron-left"></i>
-        </button>
 
         <!-- Second Panel (Slide-out Editor/Configurator next to Left Panel) -->
         <aside id="edit-panel" class="collapsed">
             <div class="edit-panel-header">
-                <h3 id="edit-panel-title">Edit Itinerary</h3>
-                <button type="button" id="btn-close-edit-panel" class="close-btn" title="Close Panel">
-                    <i data-lucide="x" style="width: 16px; height: 16px;"></i>
-                </button>
+                <h3 id="edit-panel-title">Route Editor</h3>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <button type="button" id="btn-update-prices" class="btn-action" title="Update Prices Data">
+                        <i data-lucide="refresh-cw" style="width: 16px; height: 16px;"></i>
+                    </button>
+                    <button type="button" id="btn-close-edit-panel" class="close-btn" title="Close Panel">
+                        <i data-lucide="x" style="width: 16px; height: 16px;"></i>
+                    </button>
+                </div>
             </div>
             <div class="edit-panel-content">
                 <!-- Mode 1 Editor Content -->
                 <div id="edit-manual-container" class="edit-mode-container active">
+                    <!-- Mode 1 details list (default active) -->
+                    <div id="edit-manual-details" class="edit-sub-container active">
+                        <!-- Dynamically rendered list of flights & layovers -->
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Third Panel (Slide-out Form next to Second Panel) -->
+        <aside id="form-panel" class="collapsed">
+            <div class="edit-panel-header">
+                <h3 id="manual-form-title">Add New Flight Leg</h3>
+                <button type="button" id="btn-close-form-panel" class="close-btn" title="Close Panel">
+                    <i data-lucide="x" style="width: 16px; height: 16px;"></i>
+                </button>
+            </div>
+            <div class="edit-panel-content">
+                <div id="edit-manual-form-container" class="edit-sub-container active">
                     <!-- Skyscanner Importer -->
-                    <section class="form-section" style="margin-bottom: 0px;">
+                    <section class="form-section" style="margin-bottom: 0px; padding: 0; background: transparent; border: none; box-shadow: none;">
                         <div class="form-group" style="margin-bottom: 12px;">
                             <label for="link-import-input">Import Skyscanner Flight Link</label>
                             <div class="input-container" style="display: flex; gap: 8px;">
@@ -125,14 +94,14 @@
                         </div>
                     </section>
 
-                    <div style="display: flex; align-items: center; gap: 8px; margin: 15px 0;">
+                    <div style="display: flex; align-items: center; gap: 8px; margin: 10px 0;">
                         <hr style="flex: 1; border: 0; border-top: 1px solid var(--border-color);">
-                        <span style="font-size: 0.7rem; color: var(--text-muted); font-weight: 600; letter-spacing: 0.05em;">OR ADD MANUALLY</span>
+                        <span style="font-size: 0.65rem; color: var(--text-muted); font-weight: 600; letter-spacing: 0.05em;">OR ADD MANUALLY</span>
                         <hr style="flex: 1; border: 0; border-top: 1px solid var(--border-color);">
                     </div>
 
                     <!-- Add Route Form -->
-                    <section class="form-section">
+                    <section class="form-section" style="padding: 0; background: transparent; border: none; box-shadow: none;">
                         <form id="route-form">
                             <div class="form-group autocomplete-container">
                                 <label for="origin-input">Departure City / Airport</label>
@@ -152,20 +121,18 @@
                                 <div id="destination-suggestions" class="suggestions-list" style="display: none;"></div>
                             </div>
 
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label for="departure-time">Departure Time</label>
-                                    <div class="input-container">
-                                        <i data-lucide="calendar" class="input-icon"></i>
-                                        <input type="datetime-local" id="departure-time" required>
-                                    </div>
+                            <div class="form-group">
+                                <label for="departure-time">Departure Time</label>
+                                <div class="input-container">
+                                    <i data-lucide="calendar" class="input-icon calendar-trigger" style="pointer-events: auto; cursor: pointer;"></i>
+                                    <input type="datetime-local" id="departure-time" required>
                                 </div>
-                                <div class="form-group">
-                                    <label for="arrival-time">Arrival Time</label>
-                                    <div class="input-container">
-                                        <i data-lucide="calendar-check" class="input-icon"></i>
-                                        <input type="datetime-local" id="arrival-time" required>
-                                    </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="arrival-time">Arrival Time</label>
+                                <div class="input-container">
+                                    <i data-lucide="calendar-check" class="input-icon calendar-trigger" style="pointer-events: auto; cursor: pointer;"></i>
+                                    <input type="datetime-local" id="arrival-time" required>
                                 </div>
                             </div>
 
@@ -193,62 +160,16 @@
                                 </div>
                             </div>
 
-                            <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 8px;">
-                                <i data-lucide="plus-circle"></i> Add Route
-                            </button>
-                        </form>
-                    </section>
-                </div>
-
-                <!-- Mode 2 Editor Content -->
-                <div id="edit-explorer-container" class="edit-mode-container">
-                    <section class="form-section">
-                        <form id="explorer-form">
-                            <div class="form-group autocomplete-container">
-                                <label for="explorer-origin-input">Origin City / Airport</label>
-                                <div class="input-container">
-                                    <i data-lucide="plane-departure" class="input-icon"></i>
-                                    <input type="text" id="explorer-origin-input" placeholder="Search origin location..." required autocomplete="off">
-                                </div>
-                                <div id="explorer-origin-suggestions" class="suggestions-list" style="display: none;"></div>
-                            </div>
-
-                            <div class="form-group autocomplete-container">
-                                <label for="explorer-destination-input">Final Destination</label>
-                                <div class="input-container">
-                                    <i data-lucide="plane-arrival" class="input-icon"></i>
-                                    <input type="text" id="explorer-destination-input" placeholder="Search destination..." required autocomplete="off">
-                                </div>
-                                <div id="explorer-destination-suggestions" class="suggestions-list" style="display: none;"></div>
-                            </div>
-
-                            <div class="form-row">
-                                <div class="form-group">
-                                    <label for="explorer-start-date">Earliest Start Date</label>
-                                    <div class="input-container">
-                                        <i data-lucide="calendar" class="input-icon"></i>
-                                        <input type="datetime-local" id="explorer-start-date" required>
-                                    </div>
-                                </div>
-                                <div class="form-group">
-                                    <label for="explorer-target-date">Latest Arrival Date</label>
-                                    <div class="input-container">
-                                        <i data-lucide="calendar-check" class="input-icon"></i>
-                                        <input type="datetime-local" id="explorer-target-date" required>
-                                    </div>
-                                </div>
-                            </div>
-
                             <div class="form-group">
-                                <label for="explorer-budget">Max Budget ($)</label>
+                                <label for="route-link">Flight Link (Optional)</label>
                                 <div class="input-container">
-                                    <i data-lucide="dollar-sign" class="input-icon"></i>
-                                    <input type="number" id="explorer-budget" min="10" placeholder="e.g. 1500" required>
+                                    <i data-lucide="link-2" class="input-icon"></i>
+                                    <input type="url" id="route-link" placeholder="https://example.com/flight-details">
                                 </div>
                             </div>
 
-                            <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 8px;">
-                                <i data-lucide="search"></i> Find Stops & Flights
+                            <button type="submit" id="btn-submit-route" class="btn btn-primary" style="width: 100%; margin-top: 8px;">
+                                <i data-lucide="plus-circle"></i> Add Route
                             </button>
                         </form>
                     </section>
@@ -256,19 +177,13 @@
             </div>
         </aside>
 
+        <button id="left-panel-toggle" aria-label="Toggle Left Panel" title="Collapse/Expand Panel">
+            <i data-lucide="chevron-left"></i>
+        </button>
+
         <!-- Bottom Timeline Slider and Playback Controls -->
         <div id="timeline-container">
-            <div class="timeline-controls">
-                <button id="play-pause-btn" class="play-btn" title="Play Animation">
-                    <i data-lucide="play" id="play-icon"></i>
-                </button>
-                <div class="speed-segments" title="Simulation Speed">
-                    <button type="button" class="speed-segment" data-speed="1">1x</button>
-                    <button type="button" class="speed-segment" data-speed="60">1m/s</button>
-                    <button type="button" class="speed-segment active" data-speed="3600">1h/s</button>
-                    <button type="button" class="speed-segment" data-speed="86400">1d/s</button>
-                </div>
-            </div>
+
 
             <div class="timeline-track-container">
                 <div class="timeline-info">
@@ -283,6 +198,24 @@
                         <input type="range" id="timeline-slider" class="timeline-slider" min="0" max="1000" value="0" disabled>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Price Update Modal Dialog -->
+    <div id="price-update-modal-overlay" class="price-update-modal-overlay">
+        <div class="price-update-modal">
+            <div class="price-update-modal-header">
+                <h3><i data-lucide="bell" style="width: 18px; height: 18px; color: var(--secondary);"></i> Live Price Updates</h3>
+                <button type="button" id="btn-close-price-modal" class="close-btn" title="Close Panel">
+                    <i data-lucide="x" style="width: 16px; height: 16px;"></i>
+                </button>
+            </div>
+            <div id="price-update-modal-body" class="price-update-modal-body">
+                <!-- Dynamically populated changes list -->
+            </div>
+            <div class="price-update-modal-footer">
+                <button type="button" id="btn-price-modal-ok" class="btn btn-primary" style="padding: 8px 16px; font-size: 0.85rem;">Got it</button>
             </div>
         </div>
     </div>

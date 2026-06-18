@@ -4,6 +4,8 @@ const state = {
     routes: [], // Mode 1 manual flights (raw legs)
     manualItineraries: [], // Mode 1 auto-calculated itineraries
     selectedManualItineraryIndex: 0, // Mode 1 active itinerary index
+    hoveredManualItineraryIndex: null, // Mode 1 hovered itinerary index
+    editingLegId: null, // Mode 1 flight leg currently being edited
     itineraries: [], // Mode 2 generated itineraries
     selectedItinerary: null, // Mode 2 active itinerary
     playback: {
@@ -39,10 +41,11 @@ function findItineraries(flights) {
         const lastArrival = currentFlight.arrivalTime;
         const lastDestCode = getCityCode(currentFlight.destination.name);
 
-        // Find next valid chronological flights
+        // Find next valid chronological flights, avoiding duplicate flights in path to prevent infinite loops
         const nextFlights = sorted.filter(f => 
             getCityCode(f.origin.name) === lastDestCode && 
-            f.departureTime >= lastArrival
+            f.departureTime >= lastArrival &&
+            !path.some(p => p.id === f.id)
         );
 
         if (nextFlights.length === 0) {
@@ -144,12 +147,19 @@ const map = L.map('map', {
     center: [30, -10],
     zoom: 3,
     minZoom: 2,
-    worldCopyJump: true
+    worldCopyJump: true,
+    zoomControl: false,          // Disable default top-left zoom control
+    attributionControl: false     // Remove Leaflet - CARTO attribution control
 });
+
+// Add zoom control on the right
+L.control.zoom({
+    position: 'topright'
+}).addTo(map);
 
 // Load tile layer
 L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+    attribution: '',
     subdomains: 'abcd',
     maxZoom: 20
 }).addTo(map);
@@ -168,7 +178,8 @@ function saveRoutesToLocalStorage() {
         arrivalTime: r.arrivalTime,
         price: r.price,
         color: r.color,
-        link: r.link
+        link: r.link,
+        soldOut: !!r.soldOut
     }));
     localStorage.setItem('weaver_routes', JSON.stringify(cleanRoutes));
 }
@@ -331,6 +342,8 @@ function setupAutocomplete(inputId, suggestionsId) {
     const input = document.getElementById(inputId);
     const suggestionsList = document.getElementById(suggestionsId);
 
+    if (!input || !suggestionsList) return;
+
     const searchLocations = async (query) => {
         if (!query || query.length < 3) {
             suggestionsList.style.display = 'none';
@@ -403,6 +416,12 @@ function formatDateTime(date) {
     });
 }
 
+function toLocalISO(date) {
+    if (!date || isNaN(date.getTime())) return '';
+    const tzOffset = date.getTimezoneOffset() * 60000;
+    return (new Date(date.getTime() - tzOffset)).toISOString().slice(0, 16);
+}
+
 function truncateString(str, num) {
     if (str.length <= num) return str;
     return str.slice(0, num) + '...';
@@ -415,94 +434,238 @@ function getCityCode(name) {
     return clean.substring(0, 3) || 'LOC';
 }
 
-// --- Mode Toggling ---
-function setupModeToggle() {
-    const tabs = document.querySelectorAll('.mode-tab');
-    const manualContainer = document.getElementById('mode-manual-container');
-    const explorerContainer = document.getElementById('mode-explorer-container');
-    const leftManualContainer = document.getElementById('left-manual-container');
-    const leftExplorerContainer = document.getElementById('left-explorer-container');
-
-    tabs.forEach(tab => {
-        tab.addEventListener('click', () => {
-            if (tab.classList.contains('active')) return;
-
-            tabs.forEach(t => t.classList.remove('active'));
-            tab.classList.add('active');
-
-            const mode = tab.dataset.mode;
-            state.activeMode = mode;
-
-            if (mode === 'manual') {
-                manualContainer.classList.add('active');
-                explorerContainer.classList.remove('active');
-                if (leftManualContainer) leftManualContainer.classList.add('active');
-                if (leftExplorerContainer) leftExplorerContainer.classList.remove('active');
-                
-                closeEditPanel();
-                
-                map.removeLayer(explorerLayers);
-                map.addLayer(manualLayers);
-                
-                drawRoutesOnMap();
-                updateTimelineBounds();
-                updateAirplanePositions();
-            } else {
-                explorerContainer.classList.add('active');
-                manualContainer.classList.remove('active');
-                if (leftExplorerContainer) leftExplorerContainer.classList.add('active');
-                if (leftManualContainer) leftManualContainer.classList.remove('active');
-                
-                if (state.itineraries.length === 0) {
-                    openEditPanel('explorer');
-                } else {
-                    closeEditPanel();
-                }
-                
-                map.removeLayer(manualLayers);
-                map.addLayer(explorerLayers);
-                
-                drawSelectedItineraryOnMap();
-                updateTimelineBounds();
-                updateAirplanePositions();
-            }
-        });
-    });
-}
-
+// --- Open / Close Edit Panel ---
 function openEditPanel(mode) {
     const editPanel = document.getElementById('edit-panel');
+    const leftPanel = document.getElementById('left-panel');
     const editManual = document.getElementById('edit-manual-container');
-    const editExplorer = document.getElementById('edit-explorer-container');
     const title = document.getElementById('edit-panel-title');
 
     if (!editPanel) return;
 
     editPanel.classList.remove('collapsed');
+    if (leftPanel) leftPanel.classList.add('edit-open');
 
-    if (mode === 'manual') {
-        if (title) title.textContent = "Network & Legs Editor";
-        if (editManual) editManual.classList.add('active');
-        if (editExplorer) editExplorer.classList.remove('active');
-    } else {
-        if (title) title.textContent = "Search Parameters";
-        if (editExplorer) editExplorer.classList.add('active');
-        if (editManual) editManual.classList.remove('active');
-    }
+    if (title) title.textContent = "Route Editor";
+    if (editManual) editManual.classList.add('active');
+    
+    renderItineraryDetails();
     lucide.createIcons();
 }
 
 function closeEditPanel() {
     const editPanel = document.getElementById('edit-panel');
+    const leftPanel = document.getElementById('left-panel');
+    const formPanel = document.getElementById('form-panel');
     if (editPanel) {
         editPanel.classList.add('collapsed');
+        editPanel.classList.remove('form-open');
     }
+    if (formPanel) {
+        formPanel.classList.add('collapsed');
+    }
+    if (leftPanel) {
+        leftPanel.classList.remove('edit-open');
+    }
+}
+
+function closeFormPanel() {
+    const formPanel = document.getElementById('form-panel');
+    const editPanel = document.getElementById('edit-panel');
+    if (formPanel) {
+        formPanel.classList.add('collapsed');
+    }
+    if (editPanel) {
+        editPanel.classList.remove('form-open');
+    }
+}
+
+function renderItineraryDetails() {
+    const editManual = document.getElementById('edit-manual-details');
+    if (!editManual) return;
+
+    const itin = state.manualItineraries[state.selectedManualItineraryIndex];
+    if (!itin) {
+        editManual.innerHTML = `
+            <div class="empty-state" style="padding: 20px;">
+                <i data-lucide="compass" style="width: 32px; height: 32px;"></i>
+                <p>No active itinerary selected.<br>Select one from the left panel!</p>
+            </div>
+        `;
+        lucide.createIcons();
+        return;
+    }
+
+    let legsHTML = '';
+    itin.legs.forEach((leg, idx) => {
+        const depDate = new Date(leg.departureTime);
+        const arrDate = new Date(leg.arrivalTime);
+        
+        let linkHTML = '';
+        if (leg.link) {
+            linkHTML = `
+                <a href="${leg.link}" target="_blank" class="btn-action btn-link-leg" title="Open Flight Page" style="color: var(--text-muted); text-decoration: none;">
+                    <i data-lucide="external-link"></i>
+                </a>
+            `;
+        }
+
+        const soldOutBadge = leg.soldOut ? `<span class="price-change-status sold-out" style="font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; font-weight: 700; margin-left: 8px;">SOLD OUT</span>` : '';
+
+        legsHTML += `
+            <div class="details-leg-card" style="border-left: 3px solid ${leg.color};">
+                <div class="details-leg-header">
+                    <span class="details-leg-title" style="display: flex; align-items: center;">
+                        ${getCityCode(leg.origin.name)} → ${getCityCode(leg.destination.name)}
+                        ${soldOutBadge}
+                    </span>
+                    <div class="details-leg-actions">
+                        ${linkHTML}
+                        <button type="button" class="btn-action btn-edit-leg" data-id="${leg.id}" title="Fligth editor">
+                            <i data-lucide="edit-3"></i>
+                        </button>
+                        <button type="button" class="btn-action btn-delete-leg" data-id="${leg.id}" title="Delete Flight Leg">
+                            <i data-lucide="trash-2"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="details-leg-body">
+                    <p style="margin: 3px 0; font-size: 0.8rem; color: var(--text-muted);"><strong>Dep:</strong> ${formatDateTime(depDate)}</p>
+                    <p style="margin: 3px 0; font-size: 0.8rem; color: var(--text-muted);"><strong>Arr:</strong> ${formatDateTime(arrDate)}</p>
+                    <p style="margin: 3px 0; font-size: 0.8rem; color: var(--text-muted);"><strong>Price:</strong> <span style="color: var(--secondary); font-weight:600;">$${leg.price}</span></p>
+                </div>
+            </div>
+        `;
+
+        // Check if there is a layover after this leg
+        const nextLeg = itin.legs[idx + 1];
+        if (nextLeg && nextLeg.departureTime > leg.arrivalTime) {
+            const layoverMs = nextLeg.departureTime - leg.arrivalTime;
+            const days = (layoverMs / (24 * 3600 * 1000)).toFixed(1);
+            legsHTML += `
+                <div class="details-layover-divider">
+                    <i data-lucide="clock" style="width: 12px; height: 12px;"></i>
+                    <span>Layover in ${leg.destination.name.split(',')[0]}: <strong>${days} days</strong></span>
+                </div>
+            `;
+        }
+    });
+
+    editManual.innerHTML = `
+        <div class="itinerary-details-view">
+            <div class="details-legs-list">
+                ${legsHTML}
+            </div>
+
+            <div class="details-actions" style="margin-top: 5px; display: flex; gap: 10px;">
+                <button type="button" id="btn-add-leg-trigger" class="btn btn-primary" style="flex: 1; padding: 10px; font-size: 0.82rem; display: inline-flex; justify-content: center; align-items: center; gap: 6px;">
+                    <i data-lucide="plus-circle" style="width: 15px; height: 15px;"></i>
+                    Add Flight Leg
+                </button>
+            </div>
+        </div>
+    `;
+
+    // Bind event listeners
+    const addLegTrigger = document.getElementById('btn-add-leg-trigger');
+    if (addLegTrigger) {
+        addLegTrigger.addEventListener('click', () => {
+            showLegForm(null);
+        });
+    }
+
+    editManual.querySelectorAll('.btn-edit-leg').forEach(btn => {
+        btn.addEventListener('click', () => {
+            showLegForm(btn.dataset.id);
+        });
+    });
+
+    editManual.querySelectorAll('.btn-delete-leg').forEach(btn => {
+        btn.addEventListener('click', () => {
+            if (confirm("Are you sure you want to delete this flight leg?")) {
+                deleteRoute(btn.dataset.id);
+            }
+        });
+    });
+
+    lucide.createIcons();
+}
+
+function showLegForm(legId) {
+    const formPanel = document.getElementById('form-panel');
+    const editPanel = document.getElementById('edit-panel');
+    const formContainer = document.getElementById('edit-manual-form-container');
+    const formTitle = document.getElementById('manual-form-title');
+    const submitBtn = document.getElementById('btn-submit-route');
+
+    if (formPanel) {
+        formPanel.classList.remove('collapsed');
+        if (editPanel) editPanel.classList.add('form-open');
+    }
+
+    if (!formContainer) return;
+
+    formContainer.classList.add('active');
+    formContainer.style.display = 'flex';
+
+    const originInput = document.getElementById('origin-input');
+    const destInput = document.getElementById('destination-input');
+    const depTimeInput = document.getElementById('departure-time');
+    const arrTimeInput = document.getElementById('arrival-time');
+    const priceInput = document.getElementById('route-price');
+    const colorInput = document.getElementById('route-color');
+    const routeForm = document.getElementById('route-form');
+
+    if (legId) {
+        const leg = state.routes.find(r => r.id === legId);
+        if (leg) {
+            state.editingLegId = legId;
+            if (formTitle) formTitle.textContent = "Fligth editor";
+            if (submitBtn) submitBtn.innerHTML = `<i data-lucide="check-circle" style="width:14px; height:14px; display:inline-block; vertical-align:middle; margin-right:4px;"></i> Save Flight Details`;
+
+            originInput.value = leg.origin.name;
+            originInput.dataset.lat = leg.origin.lat;
+            originInput.dataset.lng = leg.origin.lng;
+            originInput.dataset.name = leg.origin.name;
+
+            destInput.value = leg.destination.name;
+            destInput.dataset.lat = leg.destination.lat;
+            destInput.dataset.lng = leg.destination.lng;
+            destInput.dataset.name = leg.destination.name;
+
+            depTimeInput.value = toLocalISO(new Date(leg.departureTime));
+            arrTimeInput.value = toLocalISO(new Date(leg.arrivalTime));
+            priceInput.value = leg.price;
+            colorInput.value = leg.color;
+            const linkInput = document.getElementById('route-link');
+            if (linkInput) linkInput.value = leg.link || '';
+        }
+    } else {
+        state.editingLegId = null;
+        if (formTitle) formTitle.textContent = "Add New Flight Leg";
+        if (submitBtn) submitBtn.innerHTML = `<i data-lucide="plus-circle" style="width:14px; height:14px; display:inline-block; vertical-align:middle; margin-right:4px;"></i> Add Route`;
+        
+        if (routeForm) routeForm.reset();
+        const linkInput = document.getElementById('route-link');
+        if (linkInput) linkInput.value = '';
+
+        delete originInput.dataset.lat;
+        delete originInput.dataset.lng;
+        delete originInput.dataset.name;
+        delete destInput.dataset.lat;
+        delete destInput.dataset.lng;
+        delete destInput.dataset.name;
+    }
+    lucide.createIcons();
 }
 
 function renderManualItinerariesList() {
     const listContainer = document.getElementById('manual-itineraries-list');
     const optionCountSpan = document.getElementById('itinerary-option-count');
     if (!listContainer) return;
+
+    // Clean up any existing hover tooltips in document
+    document.querySelectorAll('.route-hover-tooltip').forEach(el => el.remove());
 
     listContainer.innerHTML = '';
 
@@ -526,20 +689,48 @@ function renderManualItinerariesList() {
         card.className = `itinerary-card ${isActive ? 'active' : ''}`;
         
         const durationDays = (itin.totalDuration / (24 * 3600 * 1000)).toFixed(1);
-        const stopsText = itin.legs.length - 1 === 1 ? '1 stopover' : `${itin.legs.length - 1} stopovers`;
+
+        // Helper to format date as "19 Jun"
+        const formatCardDate = (dateVal) => {
+            const date = new Date(dateVal);
+            const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+            return `${date.getDate()} ${months[date.getMonth()]}`;
+        };
+
+        // Construct stops HTML illustrating dates below airports
+        let stopsHTML = '';
+        itin.legs.forEach((leg, idx) => {
+            if (idx === 0) {
+                stopsHTML += `
+                    <div class="itinerary-stop-item">
+                        <span class="stop-airport">${getCityCode(leg.origin.name)}</span>
+                        <span class="stop-date">${formatCardDate(leg.departureTime)}</span>
+                    </div>
+                `;
+            }
+            stopsHTML += `
+                <div class="itinerary-stop-arrow"><i data-lucide="arrow-right" style="width:12px; height:12px; opacity:0.5;"></i></div>
+                <div class="itinerary-stop-item">
+                    <span class="stop-airport">${getCityCode(leg.destination.name)}</span>
+                    <span class="stop-date">${formatCardDate(leg.arrivalTime)}</span>
+                </div>
+            `;
+        });
+
+        const hasSoldOut = itin.legs.some(l => l.soldOut);
+        const soldOutWarning = hasSoldOut ? `<span style="color: var(--danger); font-size: 0.65rem; font-weight: 700; border: 1px solid var(--danger); padding: 1px 4px; border-radius: 3px; margin-left: 6px;">INCOMPLETE</span>` : '';
 
         card.innerHTML = `
             <div class="itinerary-card-header">
-                <span>Option ${index + 1}</span>
+                <span style="display: inline-flex; align-items: center;">Option ${index + 1} ${soldOutWarning}</span>
                 <div style="display: flex; gap: 8px; align-items: center;">
-                    <span class="itinerary-card-badge">${stopsText}</span>
                     <button class="btn-edit-itinerary" title="Edit Flights" style="background: transparent; border: none; color: var(--text-muted); cursor: pointer; padding: 2px; display: inline-flex; align-items: center; justify-content: center; transition: var(--transition);">
                         <i data-lucide="edit-2" style="width: 14px; height: 14px;"></i>
                     </button>
                 </div>
             </div>
-            <div class="itinerary-card-path">
-                ${itin.pathString}
+            <div class="itinerary-card-stops">
+                ${stopsHTML}
             </div>
             <div class="itinerary-card-details">
                 <span>Est. Price: <strong style="color: var(--secondary);">$${itin.totalPrice}</strong></span>
@@ -575,6 +766,70 @@ function renderManualItinerariesList() {
             });
         }
 
+        // Show route details on mouse hover tooltip next to the card
+        card.addEventListener('mouseenter', (e) => {
+            state.hoveredManualItineraryIndex = index;
+            drawRoutesOnMap();
+
+            const tooltip = document.createElement('div');
+            tooltip.className = 'route-hover-tooltip';
+            
+            let html = '<div class="tooltip-title">Route Details</div>';
+            itin.legs.forEach((leg, idx) => {
+                const depDate = new Date(leg.departureTime);
+                const arrDate = new Date(leg.arrivalTime);
+                const formatTooltipDate = (d) => {
+                    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+                    const pad = (num) => num.toString().padStart(2, '0');
+                    return `${d.getDate()} ${months[d.getMonth()]} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+                };
+                
+                html += `
+                    <div class="tooltip-leg" style="border-left: 2.5px solid ${leg.color}; padding-left: 8px; margin-bottom: 6px;">
+                        <div style="font-weight: 700; font-size: 0.82rem; color: var(--text-main); margin-bottom: 2px;">
+                            ${getCityCode(leg.origin.name)} → ${getCityCode(leg.destination.name)}
+                        </div>
+                        <div style="font-size: 0.72rem; color: var(--text-muted); line-height: 1.35;">
+                            Dep: ${formatTooltipDate(depDate)}<br>
+                            Arr: ${formatTooltipDate(arrDate)}
+                        </div>
+                        <div style="font-size: 0.72rem; color: var(--secondary); font-weight: 600; margin-top: 1px;">
+                            Price: $${leg.price}
+                        </div>
+                    </div>
+                `;
+                
+                const nextLeg = itin.legs[idx + 1];
+                if (nextLeg && nextLeg.departureTime > leg.arrivalTime) {
+                    const layoverMs = nextLeg.departureTime - leg.arrivalTime;
+                    const days = (layoverMs / (24 * 3600 * 1000)).toFixed(1);
+                    html += `
+                        <div style="font-size: 0.7rem; color: var(--warning); margin-bottom: 6px; padding-left: 10px; display: flex; align-items: center; gap: 4px;">
+                            <i data-lucide="clock" style="width: 11px; height: 11px; opacity: 0.85;"></i>
+                            <span>Layover: ${days} days</span>
+                        </div>
+                    `;
+                }
+            });
+            
+            tooltip.innerHTML = html;
+            document.body.appendChild(tooltip);
+            
+            const rect = card.getBoundingClientRect();
+            tooltip.style.position = 'fixed';
+            tooltip.style.top = `${rect.top}px`;
+            tooltip.style.left = `${rect.right + 10}px`;
+            tooltip.style.zIndex = '9999';
+            
+            lucide.createIcons();
+            
+            card.addEventListener('mouseleave', () => {
+                tooltip.remove();
+                state.hoveredManualItineraryIndex = null;
+                drawRoutesOnMap();
+            }, { once: true });
+        });
+
         listContainer.appendChild(card);
     });
     lucide.createIcons();
@@ -584,6 +839,7 @@ function renderManualItinerariesList() {
 function renderRoutesList() {
     const container = document.getElementById('routes-list');
     const countSpan = document.getElementById('route-count');
+    if (!container || !countSpan) return;
     
     countSpan.textContent = `${state.routes.length} route${state.routes.length === 1 ? '' : 's'}`;
 
@@ -681,12 +937,61 @@ function renderRoutesList() {
     lucide.createIcons();
 }
 
+// --- Gradient Polyline Draw Utilities ---
+function adjustColorBrightness(hex, percent) {
+    let r = parseInt(hex.slice(1, 3), 16);
+    let g = parseInt(hex.slice(3, 5), 16);
+    let b = parseInt(hex.slice(5, 7), 16);
+
+    r = Math.max(0, Math.min(255, Math.floor(r * percent)));
+    g = Math.max(0, Math.min(255, Math.floor(g * percent)));
+    b = Math.max(0, Math.min(255, Math.floor(b * percent)));
+
+    const rHex = r.toString(16).padStart(2, '0');
+    const gHex = g.toString(16).padStart(2, '0');
+    const bHex = b.toString(16).padStart(2, '0');
+
+    return `#${rHex}${gHex}${bHex}`;
+}
+
+function drawGradientPolyline(points, color, weight, opacity, layerGroup) {
+    const numSegments = 25; // 25 segments for smooth transition
+    const pointsPerSegment = Math.ceil(points.length / numSegments);
+
+    for (let s = 0; s < numSegments; s++) {
+        const startIdx = s * pointsPerSegment;
+        if (startIdx >= points.length - 1) break;
+        const endIdx = Math.min((s + 1) * pointsPerSegment + 1, points.length);
+
+        const segmentPoints = points.slice(startIdx, endIdx);
+        if (segmentPoints.length < 2) continue;
+
+        const latLngs = segmentPoints.map(p => L.latLng(p.lat, p.lng));
+
+        // Start of the line is darker (percent = 0.22) and destination is full brightness (percent = 1.0)
+        const percent = 0.22 + (s / (numSegments - 1)) * 0.78;
+        const segmentColor = adjustColorBrightness(color, percent);
+
+        L.polyline(latLngs, {
+            color: segmentColor,
+            weight: weight,
+            opacity: opacity,
+            lineCap: 'round',
+            lineJoin: 'round',
+            interactive: false
+        }).addTo(layerGroup);
+    }
+}
+
 function drawRoutesOnMap() {
     manualLayers.clearLayers();
     if (state.activeMode !== 'manual') return;
 
-    // Get active itinerary legs
-    const activeItin = state.manualItineraries[state.selectedManualItineraryIndex];
+    // Get active itinerary legs (hovered or selected)
+    const highlightIndex = state.hoveredManualItineraryIndex !== null
+        ? state.hoveredManualItineraryIndex
+        : state.selectedManualItineraryIndex;
+    const activeItin = state.manualItineraries[highlightIndex];
     const activeLegIds = new Set((activeItin?.legs || []).map(l => l.id));
 
     state.routes.forEach(route => {
@@ -713,12 +1018,17 @@ function drawRoutesOnMap() {
             const midPoint = points[midIdx];
             const nextPoint = points[midIdx + 1];
             const bearing = getBearing(midPoint.lat, midPoint.lng, nextPoint.lat, nextPoint.lng);
+            
+            const arrowColor = route.soldOut ? '#ef4444' : route.color;
+            const arrowOpacity = route.soldOut ? 0.75 : 0.2;
+            const arrowSize = route.soldOut ? 12 : 10;
+
             L.marker([midPoint.lat, midPoint.lng], {
                 icon: L.divIcon({
                     className: 'map-arrow-icon-wrapper',
                     html: `<div style="transform: rotate(${bearing}deg); width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; pointer-events: none;">
-                             <svg viewBox="0 0 24 24" width="10" height="10" fill="${route.color}" opacity="0.2">
-                                 <polygon points="12,2 22,22 12,17 2,22" />
+                             <svg viewBox="0 0 24 24" width="${arrowSize}" height="${arrowSize}" fill="${arrowColor}" opacity="${arrowOpacity}">
+                                  <polygon points="12,2 22,22 12,17 2,22" />
                              </svg>
                            </div>`,
                     iconSize: [16, 16],
@@ -735,26 +1045,23 @@ function drawRoutesOnMap() {
                 interactive: false
             }).addTo(manualLayers);
 
-            // Active path (thick & glowing)
-            const flightPath = L.polyline(latLngs, {
-                color: route.color,
-                weight: 4,
-                opacity: 0.85,
-                dashArray: '8, 8',
-                lineCap: 'round',
-                lineJoin: 'round'
-            }).addTo(manualLayers);
+            // Active path (thick & glowing with direction gradient)
+            drawGradientPolyline(points, route.color, 4, 0.85, manualLayers);
 
             // Directional arrow at midpoint
             const midIdx = Math.floor(points.length / 2);
             const midPoint = points[midIdx];
             const nextPoint = points[midIdx + 1];
             const bearing = getBearing(midPoint.lat, midPoint.lng, nextPoint.lat, nextPoint.lng);
+
+            const arrowColor = route.soldOut ? '#ef4444' : route.color;
+            const arrowOpacity = route.soldOut ? 0.95 : 0.85;
+
             L.marker([midPoint.lat, midPoint.lng], {
                 icon: L.divIcon({
                     className: 'map-arrow-icon-wrapper',
                     html: `<div style="transform: rotate(${bearing}deg); width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; pointer-events: none;">
-                             <svg viewBox="0 0 24 24" width="12" height="12" fill="${route.color}" opacity="0.85">
+                             <svg viewBox="0 0 24 24" width="12" height="12" fill="${arrowColor}" opacity="${arrowOpacity}">
                                  <polygon points="12,2 22,22 12,17 2,22" />
                              </svg>
                            </div>`,
@@ -764,19 +1071,6 @@ function drawRoutesOnMap() {
                 interactive: false
             }).addTo(manualLayers);
 
-            const depTimeStr = formatDateTime(new Date(route.departureTime));
-            const arrTimeStr = formatDateTime(new Date(route.arrivalTime));
-            flightPath.bindPopup(`
-                <div style="font-family: 'Outfit', sans-serif;">
-                    <h4 style="margin: 0 0 6px 0; color: ${route.color}; font-size: 1.05rem;">Flight details</h4>
-                    <p style="margin: 4px 0; font-size: 0.85rem;"><strong>From:</strong> ${route.origin.name}</p>
-                    <p style="margin: 4px 0; font-size: 0.85rem;"><strong>To:</strong> ${route.destination.name}</p>
-                    <p style="margin: 4px 0; font-size: 0.85rem;"><strong>Price:</strong> <span style="color: var(--secondary); font-weight:600;">$${route.price}</span></p>
-                    <p style="margin: 4px 0; font-size: 0.85rem;"><strong>Departure:</strong> ${depTimeStr}</p>
-                    <p style="margin: 4px 0; font-size: 0.85rem;"><strong>Arrival:</strong> ${arrTimeStr}</p>
-                </div>
-            `);
-
             // Markers (only for active selected legs)
             L.marker([route.origin.lat, route.origin.lng], { icon: createStartIcon(route.color) })
                 .addTo(manualLayers);
@@ -784,6 +1078,38 @@ function drawRoutesOnMap() {
             L.marker([route.destination.lat, route.destination.lng], { icon: createEndIcon(route.color) })
                 .addTo(manualLayers);
         }
+
+        // Invisible wide path for popup interaction, drawn for ALL routes
+        const flightPath = L.polyline(latLngs, {
+            color: 'transparent',
+            weight: 12,
+            opacity: 0,
+            interactive: true
+        }).addTo(manualLayers);
+
+        const depTimeStr = formatDateTime(new Date(route.departureTime));
+        const arrTimeStr = formatDateTime(new Date(route.arrivalTime));
+        flightPath.bindPopup(`
+            <div style="font-family: 'Outfit', sans-serif;">
+                <h4 style="margin: 0 0 6px 0; color: ${route.color}; font-size: 1.05rem;">Flight details</h4>
+                <p style="margin: 4px 0; font-size: 0.85rem;"><strong>From:</strong> ${route.origin.name}</p>
+                <p style="margin: 4px 0; font-size: 0.85rem;"><strong>To:</strong> ${route.destination.name}</p>
+                <p style="margin: 4px 0; font-size: 0.85rem;"><strong>Price:</strong> <span style="color: var(--secondary); font-weight:600;">$${route.price}</span></p>
+                <p style="margin: 4px 0; font-size: 0.85rem;"><strong>Departure:</strong> ${depTimeStr}</p>
+                <p style="margin: 4px 0; font-size: 0.85rem;"><strong>Arrival:</strong> ${arrTimeStr}</p>
+            </div>
+        `, {
+            closeButton: false,
+            offset: L.point(0, -5)
+        });
+
+        // Trigger details popup on hover above the link
+        flightPath.on('mouseover', function(e) {
+            this.openPopup(e.latlng);
+        });
+        flightPath.on('mouseout', function() {
+            this.closePopup();
+        });
     });
 }
 
@@ -797,6 +1123,7 @@ function addRoute(origin, destination, departureTime, arrivalTime, price, color,
         price: parseFloat(price),
         color,
         link,
+        soldOut: false,
         planeMarker: null
     };
 
@@ -822,6 +1149,9 @@ function deleteRoute(id) {
             planesLayerGroup.removeLayer(route.planeMarker);
         }
         state.routes.splice(routeIndex, 1);
+
+        // Close form panel in case it was editing this route
+        closeFormPanel();
 
         // Recalculate manual itineraries from DAG
         state.manualItineraries = findItineraries(state.routes);
@@ -1127,13 +1457,15 @@ function drawSelectedItineraryOnMap() {
             interactive: false
         }).addTo(explorerLayers);
 
+        // Active path (thick & glowing with direction gradient)
+        drawGradientPolyline(points, leg.color, 4, 0.85, explorerLayers);
+
+        // Invisible wide path for popup interaction
         const flightPath = L.polyline(latLngs, {
-            color: leg.color,
-            weight: 4,
-            opacity: 0.85,
-            dashArray: '8, 8',
-            lineCap: 'round',
-            lineJoin: 'round'
+            color: 'transparent',
+            weight: 12,
+            opacity: 0,
+            interactive: true
         }).addTo(explorerLayers);
 
         // Directional arrow at midpoint
@@ -1514,7 +1846,7 @@ function updateAirplanePositions() {
             const dep = route.departureTime;
             const arr = route.arrivalTime;
 
-            if (now >= dep && now <= arr) {
+            if (now >= dep && now <= arr && !route.soldOut) {
                 flightActive = true;
                 const fraction = (now - dep) / (arr - dep);
                 const pos = interpolateGeodesic(
@@ -1670,31 +2002,36 @@ function togglePlayPause() {
     state.playback.isPlaying = !state.playback.isPlaying;
 
     if (state.playback.isPlaying) {
-        playIcon.setAttribute('data-lucide', 'pause');
-        playPauseBtn.title = 'Pause Animation';
-        playPauseBtn.style.background = 'var(--danger)';
-        playPauseBtn.style.boxShadow = '0 4px 12px var(--danger-glow)';
+        if (playIcon) playIcon.setAttribute('data-lucide', 'pause');
+        if (playPauseBtn) {
+            playPauseBtn.title = 'Pause Animation';
+            playPauseBtn.style.background = 'var(--danger)';
+            playPauseBtn.style.boxShadow = '0 4px 12px var(--danger-glow)';
+        }
         
         state.playback.lastTickTime = 0;
         state.playback.animationFrameId = requestAnimationFrame(animationTick);
     } else {
-        playIcon.setAttribute('data-lucide', 'play');
-        playPauseBtn.title = 'Play Animation';
-        playPauseBtn.style.background = 'var(--primary)';
-        playPauseBtn.style.boxShadow = '0 4px 12px var(--primary-glow)';
+        if (playIcon) playIcon.setAttribute('data-lucide', 'play');
+        if (playPauseBtn) {
+            playPauseBtn.title = 'Play Animation';
+            playPauseBtn.style.background = 'var(--primary)';
+            playPauseBtn.style.boxShadow = '0 4px 12px var(--primary-glow)';
+        }
 
         if (state.playback.animationFrameId) {
             cancelAnimationFrame(state.playback.animationFrameId);
             state.playback.animationFrameId = null;
         }
     }
-    lucide.createIcons();
+    if (playPauseBtn || playIcon) {
+        lucide.createIcons();
+    }
 }
 
 // --- Event Handlers & Initialization ---
 document.addEventListener('DOMContentLoaded', () => {
     lucide.createIcons();
-    setupModeToggle();
 
     // Toggle Left Panel fold/unfold state (and auto-close edit panel if collapsed)
     const leftPanel = document.getElementById('left-panel');
@@ -1716,32 +2053,36 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Explorer Configure Search params button
-    const btnConfigureSearch = document.getElementById('btn-configure-search');
-    if (btnConfigureSearch) {
-        btnConfigureSearch.addEventListener('click', () => {
-            openEditPanel('explorer');
-        });
-    }
-
-    // Toggle Raw Flights Collapsible Drawer
-    const btnToggleRaw = document.getElementById('btn-toggle-raw-flights');
-    const rawFlightsContainer = document.getElementById('raw-flights-container');
-    const rawFlightsChevron = document.getElementById('raw-flights-chevron');
-    if (btnToggleRaw && rawFlightsContainer) {
-        btnToggleRaw.addEventListener('click', () => {
-            const isCollapsed = rawFlightsContainer.classList.toggle('collapsed');
-            if (rawFlightsChevron) {
-                rawFlightsChevron.style.transform = isCollapsed ? 'rotate(0deg)' : 'rotate(180deg)';
-            }
+    // Form Panel Close Button
+    const btnCloseForm = document.getElementById('btn-close-form-panel');
+    if (btnCloseForm) {
+        btnCloseForm.addEventListener('click', () => {
+            closeFormPanel();
         });
     }
 
     // Setup autocompletes
     setupAutocomplete('origin-input', 'origin-suggestions');
     setupAutocomplete('destination-input', 'destination-suggestions');
-    setupAutocomplete('explorer-origin-input', 'explorer-origin-suggestions');
-    setupAutocomplete('explorer-destination-input', 'explorer-destination-suggestions');
+
+    // Make calendar icons in front clickable to open picker
+    const setupClickableCalendars = () => {
+        const triggers = document.querySelectorAll('.calendar-trigger');
+        triggers.forEach(icon => {
+            const container = icon.closest('.input-container');
+            const input = container ? container.querySelector('input[type="datetime-local"]') : null;
+            if (input) {
+                icon.addEventListener('click', () => {
+                    try {
+                        input.showPicker();
+                    } catch (err) {
+                        input.focus();
+                    }
+                });
+            }
+        });
+    };
+    setupClickableCalendars();
 
     // --- Skyscanner Link Importer Event ---
     const importInput = document.getElementById('link-import-input');
@@ -1788,7 +2129,8 @@ document.addEventListener('DOMContentLoaded', () => {
             );
 
             importInput.value = '';
-            closeEditPanel();
+            renderItineraryDetails();
+            closeFormPanel();
         } catch (err) {
             console.error(err);
             alert("An error occurred while importing the Skyscanner link.");
@@ -1799,9 +2141,24 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+function findAirportInDB(query) {
+    const q = query.trim().toUpperCase();
+    if (AIRPORT_DB[q]) {
+        return { name: AIRPORT_DB[q].name, lat: AIRPORT_DB[q].lat, lng: AIRPORT_DB[q].lng };
+    }
+    // Search by name containing query or matching code
+    for (const code in AIRPORT_DB) {
+        const airport = AIRPORT_DB[code];
+        if (code === q || airport.name.toUpperCase().includes(q)) {
+            return { name: airport.name, lat: airport.lat, lng: airport.lng };
+        }
+    }
+    return null;
+}
+
     // --- Mode 1 Form Submit ---
     const routeForm = document.getElementById('route-form');
-    routeForm.addEventListener('submit', (e) => {
+    routeForm.addEventListener('submit', async (e) => {
         e.preventDefault();
 
         const originInput = document.getElementById('origin-input');
@@ -1810,33 +2167,112 @@ document.addEventListener('DOMContentLoaded', () => {
         const arrTimeInput = document.getElementById('arrival-time');
         const priceInput = document.getElementById('route-price');
         const colorInput = document.getElementById('route-color');
+        const linkInput = document.getElementById('route-link');
 
-        const originLat = parseFloat(originInput.dataset.lat);
-        const originLng = parseFloat(originInput.dataset.lng);
-        const destLat = parseFloat(destInput.dataset.lat);
-        const destLng = parseFloat(destInput.dataset.lng);
+        let originLat = parseFloat(originInput.dataset.lat);
+        let originLng = parseFloat(originInput.dataset.lng);
+        let originName = originInput.value.trim();
 
-        if (isNaN(originLat) || isNaN(originLng) || isNaN(destLat) || isNaN(destLng)) {
-            alert('Please select a valid location from the suggestions list.');
+        let destLat = parseFloat(destInput.dataset.lat);
+        let destLng = parseFloat(destInput.dataset.lng);
+        let destName = destInput.value.trim();
+
+        // Helper to resolve location from input value
+        const resolveLocation = async (inputVal, datasetLat, datasetLng) => {
+            let lat = parseFloat(datasetLat);
+            let lng = parseFloat(datasetLng);
+            let name = inputVal;
+
+            if (isNaN(lat) || isNaN(lng)) {
+                // Try database lookup first
+                const dbMatch = findAirportInDB(inputVal);
+                if (dbMatch) {
+                    return dbMatch;
+                }
+                // Try Nominatim API lookup as fallback
+                try {
+                    const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(inputVal)}+airport&limit=1`, {
+                        headers: { 'Accept-Language': 'en' }
+                    });
+                    const data = await response.json();
+                    if (data && data.length > 0) {
+                        return {
+                            name: `${inputVal} Airport, ${data[0].display_name.split(',')[1] || ''}`,
+                            lat: parseFloat(data[0].lat),
+                            lng: parseFloat(data[0].lon)
+                        };
+                    }
+                } catch (err) {
+                    console.error("Nominatim lookup failed during submit:", inputVal, err);
+                }
+                return null;
+            }
+            return { name, lat, lng };
+        };
+
+        const resolvedOrigin = await resolveLocation(originName, originInput.dataset.lat, originInput.dataset.lng);
+        const resolvedDest = await resolveLocation(destName, destInput.dataset.lat, destInput.dataset.lng);
+
+        if (!resolvedOrigin || !resolvedDest) {
+            alert('Please select valid locations or enter known airport codes.');
             return;
         }
 
         const depMs = new Date(depTimeInput.value).getTime();
         const arrMs = new Date(arrTimeInput.value).getTime();
 
+        if (isNaN(depMs) || isNaN(arrMs)) {
+            alert('Error: Please enter valid departure and arrival dates.');
+            return;
+        }
+
         if (arrMs <= depMs) {
             alert('Error: Arrival time must be after departure time.');
             return;
         }
 
-        addRoute(
-            { name: originInput.value, lat: originLat, lng: originLng },
-            { name: destInput.value, lat: destLat, lng: destLng },
-            depTimeInput.value,
-            arrTimeInput.value,
-            priceInput.value,
-            colorInput.value
-        );
+        const linkVal = linkInput ? linkInput.value.trim() : '';
+
+        if (state.editingLegId) {
+            // Edit existing route leg
+            const route = state.routes.find(r => r.id === state.editingLegId);
+            if (route) {
+                route.origin = resolvedOrigin;
+                route.destination = resolvedDest;
+                route.departureTime = depMs;
+                route.arrivalTime = arrMs;
+                route.price = parseFloat(priceInput.value) || 0;
+                route.color = colorInput.value;
+                route.link = linkVal;
+
+                state.routes.sort((a, b) => a.departureTime - b.departureTime);
+                state.manualItineraries = findItineraries(state.routes);
+                
+                if (state.selectedManualItineraryIndex >= state.manualItineraries.length) {
+                    state.selectedManualItineraryIndex = 0;
+                }
+
+                saveRoutesToLocalStorage();
+                renderManualItinerariesList();
+                renderItineraryDetails();
+                drawRoutesOnMap();
+                updateTimelineBounds();
+                updateAirplanePositions();
+            }
+            state.editingLegId = null;
+        } else {
+            // Add new route leg
+            addRoute(
+                resolvedOrigin,
+                resolvedDest,
+                depMs,
+                arrMs,
+                parseFloat(priceInput.value) || 0,
+                colorInput.value,
+                linkVal
+            );
+            renderItineraryDetails();
+        }
 
         routeForm.reset();
         delete originInput.dataset.lat;
@@ -1845,72 +2281,30 @@ document.addEventListener('DOMContentLoaded', () => {
         delete destInput.dataset.lat;
         delete destInput.dataset.lng;
         delete destInput.dataset.name;
-        closeEditPanel();
+        closeFormPanel();
     });
 
-    // --- Mode 2 Form Submit ---
-    const explorerForm = document.getElementById('explorer-form');
-    explorerForm.addEventListener('submit', (e) => {
-        e.preventDefault();
 
-        const originInput = document.getElementById('explorer-origin-input');
-        const destInput = document.getElementById('explorer-destination-input');
-        const startInput = document.getElementById('explorer-start-date');
-        const targetInput = document.getElementById('explorer-target-date');
-        const budgetInput = document.getElementById('explorer-budget');
-
-        const originLat = parseFloat(originInput.dataset.lat);
-        const originLng = parseFloat(originInput.dataset.lng);
-        const destLat = parseFloat(destInput.dataset.lat);
-        const destLng = parseFloat(destInput.dataset.lng);
-
-        if (isNaN(originLat) || isNaN(originLng) || isNaN(destLat) || isNaN(destLng)) {
-            alert('Please search and select locations from the suggestions autocomplete dropdown.');
-            return;
-        }
-
-        const startMs = new Date(startInput.value).getTime();
-        const targetMs = new Date(targetInput.value).getTime();
-        const budget = parseFloat(budgetInput.value);
-
-        if (targetMs <= startMs) {
-            alert('Error: Target arrival date must be after the start date.');
-            return;
-        }
-
-        const itineraries = generateItineraries(
-            { name: originInput.value, lat: originLat, lng: originLng },
-            { name: destInput.value, lat: destLat, lng: destLng },
-            startMs,
-            targetMs,
-            budget
-        );
-
-        state.itineraries = itineraries;
-        state.selectedItinerary = null;
-        explorerLayers.clearLayers();
-        planesLayerGroup.clearLayers();
-
-        renderItinerariesList();
-        updateTimelineBounds();
-        closeEditPanel();
-    });
 
     // --- Timeline Controls Scrubber ---
     const slider = document.getElementById('timeline-slider');
     const playPauseBtn = document.getElementById('play-pause-btn');
 
-    playPauseBtn.addEventListener('click', togglePlayPause);
+    if (playPauseBtn) {
+        playPauseBtn.addEventListener('click', togglePlayPause);
+    }
 
     // Speed Selector Pill Segments Control
     const speedSegments = document.querySelectorAll('.speed-segment');
-    speedSegments.forEach(btn => {
-        btn.addEventListener('click', () => {
-            speedSegments.forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            state.playback.speed = parseFloat(btn.dataset.speed);
+    if (speedSegments && speedSegments.length > 0) {
+        speedSegments.forEach(btn => {
+            btn.addEventListener('click', () => {
+                speedSegments.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                state.playback.speed = parseFloat(btn.dataset.speed);
+            });
         });
-    });
+    }
 
     slider.addEventListener('input', (e) => {
         state.playback.currentTime = parseFloat(e.target.value);
@@ -1936,90 +2330,166 @@ document.addEventListener('DOMContentLoaded', () => {
 
         setTimeout(() => {
             document.getElementById('pick-origin-map')?.addEventListener('click', () => {
-                const inputSuffix = state.activeMode === 'manual' ? 'origin-input' : 'explorer-origin-input';
-                const input = document.getElementById(inputSuffix);
-                input.value = `Point (${lat}, ${lng})`;
-                input.dataset.lat = lat;
-                input.dataset.lng = lng;
-                input.dataset.name = `Point (${lat}, ${lng})`;
+                const input = document.getElementById('origin-input');
+                if (input) {
+                    input.value = `Point (${lat}, ${lng})`;
+                    input.dataset.lat = lat;
+                    input.dataset.lng = lng;
+                    input.dataset.name = `Point (${lat}, ${lng})`;
+                }
                 map.closePopup();
             });
 
             document.getElementById('pick-dest-map')?.addEventListener('click', () => {
-                const inputSuffix = state.activeMode === 'manual' ? 'destination-input' : 'explorer-destination-input';
-                const input = document.getElementById(inputSuffix);
-                input.value = `Point (${lat}, ${lng})`;
-                input.dataset.lat = lat;
-                input.dataset.lng = lng;
-                input.dataset.name = `Point (${lat}, ${lng})`;
+                const input = document.getElementById('destination-input');
+                if (input) {
+                    input.value = `Point (${lat}, ${lng})`;
+                    input.dataset.lat = lat;
+                    input.dataset.lng = lng;
+                    input.dataset.name = `Point (${lat}, ${lng})`;
+                }
                 map.closePopup();
             });
         }, 100);
     });
+
+    // --- Price Update Event Listeners ---
+    const btnUpdatePrices = document.getElementById('btn-update-prices');
+    if (btnUpdatePrices) {
+        btnUpdatePrices.addEventListener('click', triggerPriceUpdate);
+    }
+    const btnUpdatePricesLeft = document.getElementById('btn-update-prices-left');
+    if (btnUpdatePricesLeft) {
+        btnUpdatePricesLeft.addEventListener('click', triggerPriceUpdate);
+    }
+    const btnClosePriceModal = document.getElementById('btn-close-price-modal');
+    if (btnClosePriceModal) {
+        btnClosePriceModal.addEventListener('click', closePriceUpdateModal);
+    }
+    const btnPriceModalOk = document.getElementById('btn-price-modal-ok');
+    if (btnPriceModalOk) {
+        btnPriceModalOk.addEventListener('click', closePriceUpdateModal);
+    }
+    const priceOverlay = document.getElementById('price-update-modal-overlay');
+    if (priceOverlay) {
+        priceOverlay.addEventListener('click', (e) => {
+            if (e.target === priceOverlay) {
+                closePriceUpdateModal();
+            }
+        });
+    }
 
     insertDemoData();
 });
 
 // Demo Data (Real trip candidates)
 async function insertDemoData() {
-    const toLocalISO = (date) => {
-        const tzOffset = date.getTimezoneOffset() * 60000;
-        return (new Date(date.getTime() - tzOffset)).toISOString().slice(0, 16);
-    };
-
-    const setupExplorerDefaultInputs = () => {
-        const now = new Date();
-        document.getElementById('explorer-origin-input').value = "Budapest Liszt Ferenc International Airport (BUD), Hungary";
-        document.getElementById('explorer-origin-input').dataset.lat = "47.4298";
-        document.getElementById('explorer-origin-input').dataset.lng = "19.2611";
-        document.getElementById('explorer-origin-input').dataset.name = "Budapest Liszt Ferenc International Airport (BUD), Hungary";
-
-        document.getElementById('explorer-destination-input').value = "Larnaca International Airport (LCA), Cyprus";
-        document.getElementById('explorer-destination-input').dataset.lat = "34.8751";
-        document.getElementById('explorer-destination-input').dataset.lng = "33.6249";
-        document.getElementById('explorer-destination-input').dataset.name = "Larnaca International Airport (LCA), Cyprus";
-
-        const startSearchDate = new Date(now.getTime() + 12 * 60 * 60 * 1000);
-        const targetSearchDate = new Date(now.getTime() + 10 * 24 * 60 * 60 * 1000);
-
-        document.getElementById('explorer-start-date').value = toLocalISO(startSearchDate);
-        document.getElementById('explorer-target-date').value = toLocalISO(targetSearchDate);
-        document.getElementById('explorer-budget').value = "1200";
-    };
+    const defaultUrls = [
+        "https://www.skyscanner.net/transport/flights/bud/duss/260619/config/10202-2606192010--32332-0-11165-2606192200?adultsv2=1&cabinclass=economy&childrenv2=&ref=home&rtn=0&preferdirects=false&outboundaltsenabled=false&inboundaltsenabled=false",
+        "https://www.skyscanner.net/transport/flights/duss/krk/260621/config/11165-2606210620--32332-0-13235-2606210800?adultsv2=1&cabinclass=economy&childrenv2=&ref=home&rtn=0&outboundaltsenabled=false&inboundaltsenabled=false&sortby=cheapest&preferdirects=false",
+        "https://www.skyscanner.net/transport/flights/duss/lca/260622/config/11165-2606221300--32415-0-13445-2606221800?adultsv2=1&cabinclass=economy&childrenv2=&ref=home&rtn=0&preferdirects=false&outboundaltsenabled=false&inboundaltsenabled=false&sortby=cheapest",
+        "https://www.skyscanner.net/transport/flights/krk/larn/260624/config/13235-2606241620--31669-0-13445-2606242030?adultsv2=1&cabinclass=economy&childrenv2=&ref=home&rtn=0&preferdirects=false&outboundaltsenabled=false&inboundaltsenabled=true&sortby=cheapest"
+    ];
+    const colors = ["#6366f1", "#f59e0b", "#10b981", "#ec4899"];
 
     // --- 1. PERSISTENCE LOAD ---
     const stored = localStorage.getItem('weaver_routes');
     if (stored) {
         try {
             const parsedRoutes = JSON.parse(stored);
-            if (parsedRoutes && parsedRoutes.length > 0) {
-                state.routes = parsedRoutes.map(r => ({
-                    ...r,
-                    id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
-                    planeMarker: null
-                }));
-                // Run pathfinder for restored routes
-                state.manualItineraries = findItineraries(state.routes);
-                state.selectedManualItineraryIndex = 0;
+            if (Array.isArray(parsedRoutes)) {
+                // Defensively filter out malformed routes
+                const validRoutes = parsedRoutes.filter(r => 
+                    r && 
+                    r.origin && typeof r.origin.name === 'string' && typeof r.origin.lat === 'number' && typeof r.origin.lng === 'number' &&
+                    r.destination && typeof r.destination.name === 'string' && typeof r.destination.lat === 'number' && typeof r.destination.lng === 'number' &&
+                    r.departureTime && r.arrivalTime
+                );
 
-                renderManualItinerariesList();
-                renderRoutesList();
-                drawRoutesOnMap();
-                updateTimelineBounds();
-                
-                const coords = [];
-                state.routes.forEach(r => {
-                    coords.push([r.origin.lat, r.origin.lng]);
-                    coords.push([r.destination.lat, r.destination.lng]);
-                });
-                if (coords.length > 0) {
-                    map.fitBounds(L.latLngBounds(coords), { padding: [50, 50] });
-                } else {
-                    map.setView([47.5, 18.5], 4);
+                if (validRoutes.length > 0) {
+                    state.routes = validRoutes.map(r => ({
+                        origin: r.origin,
+                        destination: r.destination,
+                        departureTime: typeof r.departureTime === 'string' ? new Date(r.departureTime).getTime() : Number(r.departureTime),
+                        arrivalTime: typeof r.arrivalTime === 'string' ? new Date(r.arrivalTime).getTime() : Number(r.arrivalTime),
+                        price: parseFloat(r.price) || 120,
+                        color: r.color || '#6366f1',
+                        link: r.link || '',
+                        soldOut: !!r.soldOut,
+                        id: r.id || (Date.now().toString() + Math.random().toString(36).substr(2, 5)),
+                        planeMarker: null
+                    }));
+
+                    // Check if any default flight is missing, and restore it by airport codes
+                    let restoredAny = false;
+                    const defaultLegs = [
+                        { from: 'BUD', to: 'DUS', urlIndex: 0 },
+                        { from: 'DUS', to: 'KRK', urlIndex: 1 },
+                        { from: 'DUS', to: 'LCA', urlIndex: 2 },
+                        { from: 'KRK', to: 'LCA', urlIndex: 3 }
+                    ];
+
+                    for (let i = 0; i < defaultLegs.length; i++) {
+                        const def = defaultLegs[i];
+                        const exists = state.routes.some(r => 
+                            r && r.origin && r.destination &&
+                            getCityCode(r.origin.name) === def.from && 
+                            getCityCode(r.destination.name) === def.to
+                        );
+                        if (!exists) {
+                            const urlStr = defaultUrls[def.urlIndex];
+                            const parsed = parseSkyscannerLink(urlStr);
+                            if (parsed) {
+                                const originData = await getAirportCoords(parsed.originCode);
+                                const destData = await getAirportCoords(parsed.destCode);
+                                if (originData && destData) {
+                                    const route = {
+                                        id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
+                                        origin: originData,
+                                        destination: destData,
+                                        departureTime: new Date(parsed.departureTime).getTime(),
+                                        arrivalTime: new Date(parsed.arrivalTime).getTime(),
+                                        price: 120, // default price
+                                        color: colors[def.urlIndex],
+                                        link: urlStr,
+                                        soldOut: false,
+                                        planeMarker: null
+                                    };
+                                    state.routes.push(route);
+                                    restoredAny = true;
+                                }
+                            }
+                        }
+                    }
+
+                    if (restoredAny) {
+                        state.routes.sort((a, b) => a.departureTime - b.departureTime);
+                        saveRoutesToLocalStorage();
+                    }
+
+                    // Run pathfinder for restored routes
+                    state.manualItineraries = findItineraries(state.routes);
+                    state.selectedManualItineraryIndex = 0;
+
+                    renderManualItinerariesList();
+                    renderRoutesList();
+                    drawRoutesOnMap();
+                    updateTimelineBounds();
+
+                    const coords = [];
+                    state.routes.forEach(r => {
+                        if (r && r.origin && r.destination) {
+                            coords.push([r.origin.lat, r.origin.lng]);
+                            coords.push([r.destination.lat, r.destination.lng]);
+                        }
+                    });
+                    if (coords.length > 0) {
+                        map.fitBounds(L.latLngBounds(coords), { padding: [50, 50] });
+                    } else {
+                        map.setView([47.5, 18.5], 4);
+                    }
+                    return;
                 }
-                
-                setupExplorerDefaultInputs();
-                return;
             }
         } catch (e) {
             console.error("Failed to parse stored routes from localStorage:", e);
@@ -2027,37 +2497,209 @@ async function insertDemoData() {
     }
 
     // --- 2. FALLBACK LOADER ---
-    const urls = [
-        "https://www.skyscanner.net/transport/flights/bud/duss/260619/config/10202-2606192010--32332-0-11165-2606192200?adultsv2=1&cabinclass=economy&childrenv2=&ref=home&rtn=0&preferdirects=false&outboundaltsenabled=false&inboundaltsenabled=false",
-        "https://www.skyscanner.net/transport/flights/duss/krk/260621/config/11165-2606210620--32332-0-13235-2606210800?adultsv2=1&cabinclass=economy&childrenv2=&ref=home&rtn=0&outboundaltsenabled=false&inboundaltsenabled=false&sortby=cheapest&preferdirects=false",
-        "https://www.skyscanner.net/transport/flights/duss/lca/260622/config/11165-2606221300--32415-0-13445-2606221800?adultsv2=1&cabinclass=economy&childrenv2=&ref=home&rtn=0&preferdirects=false&outboundaltsenabled=false&inboundaltsenabled=false&sortby=cheapest",
-        "https://www.skyscanner.net/transport/flights/krk/larn/260624/config/13235-2606241620--31669-0-13445-2606242030?adultsv2=1&cabinclass=economy&childrenv2=&ref=home&rtn=0&preferdirects=false&outboundaltsenabled=false&inboundaltsenabled=true&sortby=cheapest"
-    ];
-
-    const colors = ["#6366f1", "#f59e0b", "#10b981", "#ec4899"];
-
-    for (let i = 0; i < urls.length; i++) {
-        const urlStr = urls[i];
+    state.routes = [];
+    for (let i = 0; i < defaultUrls.length; i++) {
+        const urlStr = defaultUrls[i];
         const parsed = parseSkyscannerLink(urlStr);
         if (parsed) {
             const originData = await getAirportCoords(parsed.originCode);
             const destData = await getAirportCoords(parsed.destCode);
             
             if (originData && destData) {
-                addRoute(
-                    originData,
-                    destData,
-                    parsed.departureTime,
-                    parsed.arrivalTime,
-                    120, // default price
-                    colors[i],
-                    urlStr
-                );
+                state.routes.push({
+                    id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
+                    origin: originData,
+                    destination: destData,
+                    departureTime: new Date(parsed.departureTime).getTime(),
+                    arrivalTime: new Date(parsed.arrivalTime).getTime(),
+                    price: 120,
+                    color: colors[i],
+                    link: urlStr,
+                    soldOut: false,
+                    planeMarker: null
+                });
             }
         }
     }
 
+    state.routes.sort((a, b) => a.departureTime - b.departureTime);
+    state.manualItineraries = findItineraries(state.routes);
+    state.selectedManualItineraryIndex = 0;
+
+    renderManualItinerariesList();
+    renderRoutesList();
+    drawRoutesOnMap();
+    updateTimelineBounds();
+
     map.setView([47.5, 18.5], 4);
     saveRoutesToLocalStorage();
-    setupExplorerDefaultInputs();
+}
+
+// --- Live Price Update Logic & Modal ---
+function triggerPriceUpdate() {
+    if (state.routes.length === 0) {
+        alert("No flight legs in network to update. Add flight legs first!");
+        return;
+    }
+
+    const changes = [];
+    const numChanges = Math.min(state.routes.length, Math.floor(Math.random() * 3) + 2); // 2 to 4 changes
+    const candidates = [...state.routes];
+    
+    const selected = [];
+    for (let i = 0; i < numChanges; i++) {
+        if (candidates.length === 0) break;
+        const idx = Math.floor(Math.random() * candidates.length);
+        selected.push(candidates.splice(idx, 1)[0]);
+    }
+
+    selected.forEach(route => {
+        const routeName = `${getCityCode(route.origin.name)} → ${getCityCode(route.destination.name)}`;
+        const depDate = new Date(route.departureTime);
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const formatItemDate = `${depDate.getDate()} ${months[depDate.getMonth()]}`;
+        
+        const decision = Math.random();
+        if (decision < 0.25) {
+            // Sold out
+            const r = state.routes.find(x => x.id === route.id);
+            if (r) {
+                r.soldOut = true;
+                changes.push({
+                    name: routeName,
+                    time: formatItemDate,
+                    status: 'sold-out',
+                    oldPrice: r.price,
+                    link: r.link
+                });
+            }
+        } else if (decision < 0.65) {
+            // Price goes up
+            const pct = 0.1 + Math.random() * 0.25; // 10% to 35%
+            const oldPrice = route.price;
+            const newPrice = Math.round(oldPrice * (1 + pct));
+            
+            const r = state.routes.find(x => x.id === route.id);
+            if (r) {
+                r.price = newPrice;
+                r.soldOut = false;
+                changes.push({
+                    name: routeName,
+                    time: formatItemDate,
+                    status: 'price-up',
+                    oldPrice,
+                    newPrice,
+                    link: r.link
+                });
+            }
+        } else {
+            // Price goes down
+            const pct = 0.1 + Math.random() * 0.25; // 10% to 35%
+            const oldPrice = route.price;
+            const newPrice = Math.max(15, Math.round(oldPrice * (1 - pct)));
+            
+            const r = state.routes.find(x => x.id === route.id);
+            if (r) {
+                r.price = newPrice;
+                r.soldOut = false;
+                changes.push({
+                    name: routeName,
+                    time: formatItemDate,
+                    status: 'price-down',
+                    oldPrice,
+                    newPrice,
+                    link: r.link
+                });
+            }
+        }
+    });
+
+    if (changes.length > 0) {
+        state.manualItineraries = findItineraries(state.routes);
+        if (state.selectedManualItineraryIndex >= state.manualItineraries.length) {
+            state.selectedManualItineraryIndex = 0;
+        }
+
+        saveRoutesToLocalStorage();
+        renderManualItinerariesList();
+        renderItineraryDetails();
+        drawRoutesOnMap();
+        updateTimelineBounds();
+        updateAirplanePositions();
+    }
+
+    showPriceUpdateModal(changes);
+}
+
+function showPriceUpdateModal(changes) {
+    const overlay = document.getElementById('price-update-modal-overlay');
+    const body = document.getElementById('price-update-modal-body');
+    if (!overlay || !body) return;
+
+    body.innerHTML = '';
+
+    if (changes.length === 0) {
+        body.innerHTML = `
+            <div class="empty-state" style="padding: 20px 0;">
+                <i data-lucide="check-circle" style="width: 32px; height: 32px; color: var(--secondary); margin-bottom: 8px;"></i>
+                <p>All prices are up to date! No changes detected.</p>
+            </div>
+        `;
+    } else {
+        changes.forEach(change => {
+            let statusHTML = '';
+            let priceHTML = '';
+            if (change.status === 'sold-out') {
+                statusHTML = `<span class="price-change-status sold-out">SOLD OUT</span>`;
+                priceHTML = `<span class="price-change-old">$${change.oldPrice}</span>`;
+            } else if (change.status === 'price-up') {
+                statusHTML = `<span class="price-change-status price-up">+$${change.newPrice - change.oldPrice}</span>`;
+                priceHTML = `
+                    <span class="price-change-old">$${change.oldPrice}</span>
+                    <strong style="font-size: 0.9rem; color: var(--text-main); font-weight:700;">$${change.newPrice}</strong>
+                `;
+            } else if (change.status === 'price-down') {
+                statusHTML = `<span class="price-change-status price-down">-$${change.oldPrice - change.newPrice}</span>`;
+                priceHTML = `
+                    <span class="price-change-old">$${change.oldPrice}</span>
+                    <strong style="font-size: 0.9rem; color: var(--text-main); font-weight:700;">$${change.newPrice}</strong>
+                `;
+            }
+
+            let linkHTML = '';
+            if (change.link) {
+                linkHTML = `
+                    <a href="${change.link}" target="_blank" class="price-change-link" title="Open Flight Page" style="color: var(--text-muted); display: inline-flex; align-items: center; justify-content: center; transition: var(--transition); padding: 2px; border-radius: 4px;">
+                        <i data-lucide="external-link" style="width: 13px; height: 13px;"></i>
+                    </a>
+                `;
+            }
+
+            body.innerHTML += `
+                <div class="price-change-item">
+                    <div class="price-change-route-info">
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <span class="price-change-route-name">${change.name}</span>
+                            ${linkHTML}
+                        </div>
+                        <span class="price-change-route-time">${change.time}</span>
+                    </div>
+                    <div class="price-change-value">
+                        ${statusHTML}
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            ${priceHTML}
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+    }
+
+    overlay.classList.add('active');
+    lucide.createIcons();
+}
+
+function closePriceUpdateModal() {
+    const overlay = document.getElementById('price-update-modal-overlay');
+    if (overlay) overlay.classList.remove('active');
 }

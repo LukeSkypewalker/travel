@@ -172,6 +172,12 @@ input:focus, select:focus {
     box-shadow: 0 0 0 3px var(--primary-glow);
 }
 
+/* Hide native calendar icon in datetime-local inputs */
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+    display: none;
+    -webkit-appearance: none;
+}
+
 /* Nominatim Autocomplete Suggestions */
 .autocomplete-container {
     position: relative;
@@ -694,15 +700,17 @@ input:focus, select:focus {
     gap: 20px;
 }
 
-/* Itinerary Cards */
+/* Itinerary Cards Redesign */
 .itinerary-card {
-    background: var(--bg-card);
+    background: rgba(15, 23, 42, 0.45);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
     border: 1px solid var(--border-color);
     border-radius: var(--radius);
-    padding: 16px;
+    padding: 14px 16px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 8px;
     position: relative;
     cursor: pointer;
     transition: var(--transition);
@@ -717,23 +725,33 @@ input:focus, select:focus {
     bottom: 0;
     width: 4px;
     background: var(--text-muted);
+    opacity: 0.3;
     transition: var(--transition);
 }
 
 .itinerary-card:hover {
-    border-color: var(--border-focus);
-    transform: translateY(-2px);
+    border-color: rgba(255, 255, 255, 0.15);
+    background: rgba(30, 41, 59, 0.55);
+    transform: translateY(-2px) scale(1.005);
     box-shadow: var(--shadow-main);
 }
 
-.itinerary-card.selected {
-    border-color: var(--primary);
-    box-shadow: 0 0 12px var(--primary-glow);
-    background: rgba(99, 102, 241, 0.08);
+.itinerary-card:hover::before {
+    opacity: 0.7;
 }
 
+.itinerary-card.active,
+.itinerary-card.selected {
+    background: rgba(99, 102, 241, 0.08);
+    border-color: var(--primary);
+    box-shadow: 0 0 16px rgba(99, 102, 241, 0.15);
+}
+
+.itinerary-card.active::before,
 .itinerary-card.selected::before {
     background: var(--primary);
+    opacity: 1;
+    width: 5px;
 }
 
 .itinerary-card-header {
@@ -760,6 +778,42 @@ input:focus, select:focus {
     color: var(--text-muted);
     font-weight: 500;
 }
+
+.itinerary-card-stops {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 8px 0;
+    padding: 2px 0;
+}
+
+.itinerary-stop-item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.stop-airport {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text-main);
+    line-height: 1.2;
+}
+
+.stop-date {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    line-height: 1.2;
+    margin-top: 1px;
+}
+
+.itinerary-stop-arrow {
+    display: flex;
+    align-items: center;
+    color: var(--text-muted);
+}
+
 
 .itinerary-timeline-visual {
     display: flex;
@@ -1193,69 +1247,6 @@ input:focus, select:focus {
     overflow-y: auto;
     padding-right: 4px;
 }
-
-.itinerary-card {
-    background: rgba(30, 41, 59, 0.4);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius);
-    padding: 12px 14px;
-    cursor: pointer;
-    transition: var(--transition);
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    position: relative;
-    overflow: hidden;
-}
-
-.itinerary-card:hover {
-    border-color: rgba(255, 255, 255, 0.15);
-    background: rgba(30, 41, 59, 0.55);
-}
-
-.itinerary-card.active {
-    background: rgba(99, 102, 241, 0.1);
-    border-color: var(--primary);
-    box-shadow: 0 0 12px rgba(99, 102, 241, 0.15);
-}
-
-.itinerary-card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 0.85rem;
-    font-weight: 600;
-}
-
-.itinerary-card-path {
-    font-family: inherit;
-    font-size: 0.92rem;
-    font-weight: 700;
-    color: var(--text-main);
-    letter-spacing: 0.02em;
-}
-
-.itinerary-card-details {
-    display: flex;
-    justify-content: space-between;
-    font-size: 0.75rem;
-    color: var(--text-muted);
-}
-
-.itinerary-card-badge {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    padding: 1px 5px;
-    font-weight: 600;
-}
-
-.itinerary-card.active .itinerary-card-badge {
-    background: rgba(99, 102, 241, 0.2);
-    border-color: rgba(99, 102, 241, 0.4);
-    color: var(--text-accent);
-}
-
 /* Collapsible Drawer Styles */
 .raw-flights-drawer {
     border: 1px solid var(--border-color);
@@ -1304,6 +1295,58 @@ input:focus, select:focus {
     pointer-events: none;
 }
 
+/* Compact route cards for individual legs list in drawer */
+.drawer-content .route-card {
+    background: rgba(15, 23, 42, 0.4) !important;
+    border: 1px solid rgba(255, 255, 255, 0.05) !important;
+    padding: 10px 12px !important;
+    border-radius: 8px !important;
+    font-size: 0.82rem !important;
+    gap: 6px !important;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
+.drawer-content .route-card:hover {
+    background: rgba(30, 41, 59, 0.45) !important;
+    border-color: rgba(255, 255, 255, 0.12) !important;
+    transform: translateY(-1px) !important;
+}
+
+.drawer-content .route-locations {
+    gap: 2px !important;
+}
+
+.drawer-content .route-node {
+    font-size: 0.85rem !important;
+    gap: 6px !important;
+}
+
+.drawer-content .route-node-dot {
+    width: 6px !important;
+    height: 6px !important;
+}
+
+.drawer-content .route-node-line {
+    height: 8px !important;
+    margin-left: 2px !important;
+}
+
+.drawer-content .route-details {
+    padding: 6px !important;
+    font-size: 0.72rem !important;
+    gap: 4px !important;
+}
+
+.drawer-content .route-detail-item {
+    gap: 4px !important;
+}
+
+.drawer-content .route-detail-item svg {
+    width: 12px !important;
+    height: 12px !important;
+}
+
 /* Left Panel Styles */
 #left-panel {
     position: absolute;
@@ -1322,6 +1365,11 @@ input:focus, select:focus {
     flex-direction: column;
     overflow: hidden;
     transition: var(--transition);
+}
+
+#left-panel.edit-open {
+    border-radius: var(--radius) 0 0 var(--radius);
+    box-shadow: -8px 8px 32px 0 rgba(0, 0, 0, 0.35); /* Unified shadow - left/bottom only */
 }
 
 .left-panel-content {
@@ -1397,10 +1445,10 @@ input:focus, select:focus {
     border: none !important;
 }
 
-/* Edit Panel (Second panel sitting next to left panel) */
+/* Edit Panel (Second panel sitting next to left panel - attached without gaps) */
 #edit-panel {
     position: absolute;
-    left: 390px; /* Sits next to left panel (20px gap + 360px width + 10px spacing = 390px) */
+    left: 380px; /* Sits flush next to left panel (20px gap + 360px width) */
     top: 20px;
     bottom: 120px;
     width: 400px;
@@ -1408,8 +1456,9 @@ input:focus, select:focus {
     backdrop-filter: var(--glass-blur);
     -webkit-backdrop-filter: var(--glass-blur);
     border: 1px solid var(--border-color);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow-main);
+    border-left: none; /* Join they visually */
+    border-radius: 0 var(--radius) var(--radius) 0; /* Only right corners rounded */
+    box-shadow: 8px 8px 32px 0 rgba(0, 0, 0, 0.35); /* Unified shadow - right/bottom only */
     z-index: 95; /* Behind left-panel-toggle but in front of map */
     display: flex;
     flex-direction: column;
@@ -1455,18 +1504,81 @@ input:focus, select:focus {
 
 /* Edit Panel Collapsed State */
 #edit-panel.collapsed {
-    transform: translateX(calc(-100% - 400px));
+    transform: translateX(-360px); /* Slides directly behind left-panel */
     opacity: 0;
     pointer-events: none;
 }
 
 #left-panel.collapsed ~ #edit-panel {
-    transform: translateX(-380px);
+    transform: translateX(-780px); /* Slides off-screen */
 }
 
 #left-panel.collapsed ~ #edit-panel.collapsed {
-    transform: translateX(calc(-100% - 400px));
+    transform: translateX(-780px); /* Slides off-screen */
 }
+
+/* Slide Left Panel Toggle button to the right of the edit-panel when it expands */
+#edit-panel:not(.collapsed) ~ #left-panel-toggle {
+    transform: translateX(400px);
+}
+
+/* Third Panel: Form Panel */
+#form-panel {
+    position: absolute;
+    left: 780px; /* Sits next to edit panel (380px + 400px) */
+    top: 20px;
+    bottom: 120px;
+    width: 400px;
+    background: var(--bg-sidebar);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border: 1px solid var(--border-color);
+    border-left: none; /* Join visually */
+    border-radius: 0 var(--radius) var(--radius) 0; /* Only right corners rounded */
+    box-shadow: 8px 8px 32px 0 rgba(0, 0, 0, 0.35); /* Unified shadow */
+    z-index: 94; /* Behind edit-panel but in front of map */
+    display: flex;
+    flex-direction: column;
+    transition: var(--transition);
+}
+
+#form-panel.collapsed {
+    transform: translateX(-400px); /* Slides directly behind edit-panel */
+    opacity: 0;
+    pointer-events: none;
+}
+
+#left-panel.collapsed ~ #form-panel {
+    transform: translateX(-380px);
+}
+
+#left-panel.collapsed ~ #form-panel.collapsed {
+    transform: translateX(-780px); /* Slides off-screen */
+}
+
+/* If edit-panel is collapsed, form-panel should also slide off-screen */
+#edit-panel.collapsed ~ #form-panel {
+    transform: translateX(-400px);
+    opacity: 0;
+    pointer-events: none;
+}
+
+#left-panel.collapsed ~ #edit-panel.collapsed ~ #form-panel {
+    transform: translateX(-780px);
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Slide Left Panel Toggle button further to the right if both edit-panel and form-panel are open */
+#edit-panel:not(.collapsed) ~ #form-panel:not(.collapsed) ~ #left-panel-toggle {
+    transform: translateX(800px);
+}
+
+/* Join the panels visually by removing rounded corners when form is open */
+#edit-panel.form-open {
+    border-radius: 0;
+}
+
 
 /* Close Button Utility */
 .close-btn {
@@ -1488,7 +1600,327 @@ input:focus, select:focus {
 }
 
 /* Card Edit Button */
+.btn-edit-itinerary {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition);
+}
+
 .btn-edit-itinerary:hover {
-    color: var(--primary) !important;
+    color: var(--text-main) !important;
+    background: rgba(255, 255, 255, 0.08);
     transform: scale(1.15);
 }
+
+/* Sub-containers inside edit panel */
+.edit-sub-container {
+    display: none;
+    flex-direction: column;
+    gap: 15px;
+    flex: 1;
+}
+
+.edit-sub-container.active {
+    display: flex;
+}
+
+/* Details View Styles (in Edit panel details container) */
+.itinerary-details-view {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.details-summary-card {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    padding: 14px;
+}
+
+.details-legs-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    max-height: calc(100vh - 380px);
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.details-leg-card {
+    background: rgba(30, 41, 59, 0.3);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: var(--transition);
+}
+
+.details-leg-card:hover {
+    background: rgba(30, 41, 59, 0.45);
+    border-color: rgba(255, 255, 255, 0.12);
+}
+
+.details-leg-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.details-leg-title {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: var(--text-main);
+}
+
+.details-leg-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.btn-action {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: var(--transition);
+}
+
+.btn-action:hover {
+    color: var(--text-main);
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.btn-action.btn-edit-leg:hover,
+.btn-action.btn-link-leg:hover {
+    color: var(--primary);
+}
+
+.btn-action.btn-delete-leg:hover {
+    color: var(--danger);
+}
+
+.btn-action i {
+    width: 14px;
+    height: 14px;
+}
+
+.details-layover-divider {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.75rem;
+    color: var(--warning);
+    background: rgba(245, 158, 11, 0.05);
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px dashed rgba(245, 158, 11, 0.2);
+    align-self: center;
+    width: fit-content;
+}
+
+/* Route Hover Tooltip */
+.route-hover-tooltip {
+    background: rgba(15, 23, 42, 0.92);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    width: 260px;
+    box-shadow: 0 10px 32px rgba(0, 0, 0, 0.45);
+    pointer-events: none;
+    color: var(--text-main);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.route-hover-tooltip .tooltip-title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--text-main);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 6px;
+    margin-bottom: 2px;
+}
+
+.route-hover-tooltip .tooltip-leg {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+/* Price Update Modal Dialog */
+.price-update-modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(15, 23, 42, 0.75);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+.price-update-modal-overlay.active {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.price-update-modal {
+    background: var(--bg-sidebar);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius);
+    width: 450px;
+    max-width: 90vw;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transform: translateY(20px);
+    transition: transform 0.3s ease;
+}
+
+.price-update-modal-overlay.active .price-update-modal {
+    transform: translateY(0);
+}
+
+.price-update-modal-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.price-update-modal-header h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--text-main);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.price-update-modal-body {
+    padding: 20px;
+    max-height: 350px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.price-change-item {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: var(--transition);
+}
+
+.price-change-item:hover {
+    background: rgba(255, 255, 255, 0.04);
+}
+
+.price-change-route-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.price-change-route-name {
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: var(--text-main);
+}
+
+.price-change-link:hover {
+    color: var(--primary) !important;
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.price-change-route-time {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+
+.price-change-value {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+}
+
+.price-change-status {
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+.price-change-status.price-up {
+    color: var(--danger);
+}
+
+.price-change-status.price-down {
+    color: var(--secondary);
+}
+
+.price-change-status.sold-out {
+    color: #ef4444;
+    background: rgba(239, 68, 68, 0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.price-change-old {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    text-decoration: line-through;
+}
+
+.price-update-modal-footer {
+    padding: 16px 20px;
+    border-top: 1px solid var(--border-color);
+    display: flex;
+    justify-content: flex-end;
+}
+
+#btn-update-prices i,
+#btn-update-prices-left i {
+    transition: transform 0.4s ease;
+}
+
+#btn-update-prices:hover i,
+#btn-update-prices-left:hover i {
+    transform: rotate(180deg);
+}
+

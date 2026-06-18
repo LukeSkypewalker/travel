@@ -716,11 +716,6 @@ function renderManualItinerariesList() {
         card.innerHTML = `
             <div class="itinerary-card-header">
                 <span style="display: inline-flex; align-items: center;">Option ${index + 1} ${soldOutWarning}</span>
-                <div style="display: flex; gap: 8px; align-items: center;">
-                    <button class="btn-edit-itinerary" title="Edit Flights" style="background: transparent; border: none; color: var(--text-muted); cursor: pointer; padding: 2px; display: inline-flex; align-items: center; justify-content: center; transition: var(--transition);">
-                        <i data-lucide="edit-2" style="width: 14px; height: 14px;"></i>
-                    </button>
-                </div>
             </div>
             <div class="itinerary-card-stops">
                 ${stopsHTML}
@@ -732,8 +727,8 @@ function renderManualItinerariesList() {
         `;
 
         card.addEventListener('click', () => {
-            if (state.selectedManualItineraryIndex === index) return;
             state.selectedManualItineraryIndex = index;
+            localStorage.setItem('weaver_selected_itinerary_index', index);
             
             // Re-render list to update active card styling
             renderManualItinerariesList();
@@ -743,21 +738,10 @@ function renderManualItinerariesList() {
             
             // Re-draw timeline scale & bounds
             updateTimelineBounds();
-        });
 
-        const editBtn = card.querySelector('.btn-edit-itinerary');
-        if (editBtn) {
-            editBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                
-                state.selectedManualItineraryIndex = index;
-                renderManualItinerariesList();
-                drawRoutesOnMap();
-                updateTimelineBounds();
-                
-                openEditPanel('manual');
-            });
-        }
+            // Open Route Editor details panel
+            openEditPanel('manual');
+        });
 
         // Show route details on mouse hover tooltip next to the card
         card.addEventListener('mouseenter', (e) => {
@@ -1126,6 +1110,7 @@ function addRoute(origin, destination, departureTime, arrivalTime, price, color,
     // Recalculate manual itineraries from DAG
     state.manualItineraries = findItineraries(state.routes);
     state.selectedManualItineraryIndex = 0;
+    localStorage.setItem('weaver_selected_itinerary_index', 0);
 
     saveRoutesToLocalStorage();
     renderManualItinerariesList();
@@ -1149,6 +1134,7 @@ function deleteRoute(id) {
         // Recalculate manual itineraries from DAG
         state.manualItineraries = findItineraries(state.routes);
         state.selectedManualItineraryIndex = 0;
+        localStorage.setItem('weaver_selected_itinerary_index', 0);
         
         saveRoutesToLocalStorage();
         renderManualItinerariesList();
@@ -2252,6 +2238,7 @@ function findAirportInDB(query) {
                 if (state.selectedManualItineraryIndex >= state.manualItineraries.length) {
                     state.selectedManualItineraryIndex = 0;
                 }
+                localStorage.setItem('weaver_selected_itinerary_index', state.selectedManualItineraryIndex);
 
                 saveRoutesToLocalStorage();
                 renderManualItinerariesList();
@@ -2470,7 +2457,10 @@ async function insertDemoData() {
 
                     // Run pathfinder for restored routes
                     state.manualItineraries = findItineraries(state.routes);
-                    state.selectedManualItineraryIndex = 0;
+                    const savedIdx = localStorage.getItem('weaver_selected_itinerary_index');
+                    state.selectedManualItineraryIndex = (savedIdx !== null && !isNaN(savedIdx) && Number(savedIdx) < state.manualItineraries.length)
+                        ? Number(savedIdx)
+                        : 0;
 
                     renderManualItinerariesList();
                     renderRoutesList();
@@ -2526,6 +2516,7 @@ async function insertDemoData() {
     state.routes.sort((a, b) => a.departureTime - b.departureTime);
     state.manualItineraries = findItineraries(state.routes);
     state.selectedManualItineraryIndex = 0;
+    localStorage.setItem('weaver_selected_itinerary_index', 0);
 
     renderManualItinerariesList();
     renderRoutesList();
@@ -2620,6 +2611,7 @@ function triggerPriceUpdate() {
         if (state.selectedManualItineraryIndex >= state.manualItineraries.length) {
             state.selectedManualItineraryIndex = 0;
         }
+        localStorage.setItem('weaver_selected_itinerary_index', state.selectedManualItineraryIndex);
 
         saveRoutesToLocalStorage();
         renderManualItinerariesList();

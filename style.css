@@ -986,6 +986,46 @@ input[type="datetime-local"]::-webkit-calendar-picker-indicator {
     }
 }
 
+/* Home Base marker styles */
+.custom-home-icon-wrapper {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.home-marker {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-radius: 50%;
+    background: rgba(15, 23, 42, 0.95);
+    border: 2px solid var(--primary);
+    box-shadow: 0 0 10px var(--primary);
+    color: var(--primary);
+    transition: var(--transition);
+    animation: home-float-pulse 3s infinite ease-in-out;
+}
+
+.home-marker:hover {
+    transform: scale(1.1);
+    box-shadow: 0 0 15px var(--primary);
+}
+
+@keyframes home-float-pulse {
+    0% {
+        transform: translateY(0) scale(1);
+        box-shadow: 0 0 8px var(--primary);
+    }
+    50% {
+        transform: translateY(-3px) scale(1.03);
+        box-shadow: 0 0 15px var(--primary), 0 0 20px rgba(99, 102, 241, 0.2);
+    }
+    100% {
+        transform: translateY(0) scale(1);
+        box-shadow: 0 0 8px var(--primary);
+    }
+}
+
 /* Spinner Animation for loader */
 .animate-spin {
     animation: spin 1.2s linear infinite;

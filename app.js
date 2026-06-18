@@ -169,6 +169,16 @@ const manualLayers = L.layerGroup().addTo(map);
 const explorerLayers = L.layerGroup().addTo(map);
 const planesLayerGroup = L.layerGroup().addTo(map);
 
+// Larnaca Home Marker
+L.marker([34.8751, 33.6249], { icon: createHomeIcon(), zIndexOffset: 1000 })
+    .addTo(map)
+    .bindPopup(`
+        <div style="font-family: 'Outfit', sans-serif; min-width: 140px;">
+            <h4 style="margin: 0 0 4px 0; color: var(--primary); font-weight: 600;">Home Base</h4>
+            <p style="margin: 0; font-size: 0.82rem; color: var(--text-main);">Larnaca, Cyprus (LCA)</p>
+        </div>
+    `);
+
 // --- LocalStorage Persistence Helpers ---
 function saveRoutesToLocalStorage() {
     const cleanRoutes = state.routes.map(r => ({
@@ -238,6 +248,20 @@ function createExploringIcon() {
                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                      <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/>
                      <circle cx="12" cy="13" r="3"/>
+                 </svg>
+               </div>`,
+        iconSize: [36, 36],
+        iconAnchor: [18, 18]
+    });
+}
+
+function createHomeIcon() {
+    return L.divIcon({
+        className: 'custom-home-icon-wrapper',
+        html: `<div class="home-marker" style="width: 36px; height: 36px;">
+                 <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                     <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+                     <polyline points="9 22 9 12 15 12 15 22"/>
                  </svg>
                </div>`,
         iconSize: [36, 36],
@@ -325,11 +349,22 @@ function parseSkyscannerLink(urlStr) {
         const depLocalISO = parseTimeStr(depTimeStr);
         const arrLocalISO = parseTimeStr(arrTimeStr);
 
+        let stopsCount = 0;
+        try {
+            const configParts = configPart.split('--')[1].split('-');
+            if (configParts.length >= 3) {
+                stopsCount = parseInt(configParts[configParts.length - 3]) || 0;
+            }
+        } catch (e) {
+            console.error("Error parsing stops count from configPart:", e);
+        }
+
         return {
             originCode,
             destCode,
             departureTime: depLocalISO,
-            arrivalTime: arrLocalISO
+            arrivalTime: arrLocalISO,
+            stopsCount
         };
     } catch (e) {
         console.error("Parse Skyscanner link error:", e);
@@ -532,7 +567,7 @@ function renderItineraryDetails() {
                 <div class="details-leg-body">
                     <p style="margin: 3px 0; font-size: 0.8rem; color: var(--text-muted);"><strong>Dep:</strong> ${formatDateTime(depDate)}</p>
                     <p style="margin: 3px 0; font-size: 0.8rem; color: var(--text-muted);"><strong>Arr:</strong> ${formatDateTime(arrDate)}</p>
-                    <p style="margin: 3px 0; font-size: 0.8rem; color: var(--text-muted);"><strong>Price:</strong> <span style="color: var(--secondary); font-weight:600;">$${leg.price}</span></p>
+                    <p style="margin: 3px 0; font-size: 0.8rem; color: var(--text-muted);"><strong>Price:</strong> <span style="color: var(--secondary); font-weight:600;">€${leg.price}</span></p>
                 </div>
             </div>
         `;
@@ -721,7 +756,7 @@ function renderManualItinerariesList() {
                 ${stopsHTML}
             </div>
             <div class="itinerary-card-details">
-                <span>Est. Price: <strong style="color: var(--secondary);">$${itin.totalPrice}</strong></span>
+                <span>Est. Price: <strong style="color: var(--secondary);">€${itin.totalPrice}</strong></span>
                 <span>Duration: <strong>${durationDays} days</strong></span>
             </div>
         `;
@@ -820,7 +855,7 @@ function renderRoutesList() {
                     <span>${durationHours} hrs</span>
                 </div>
                 <div class="route-detail-item price-tag">
-                    <span>$${route.price}</span>
+                    <span>€${route.price}</span>
                 </div>
                 <div class="route-detail-item" style="grid-column: span 2;">
                     <i data-lucide="plane-takeoff"></i>
@@ -1008,7 +1043,7 @@ function drawRoutesOnMap() {
                 <h4 style="margin: 0 0 6px 0; color: ${route.color}; font-size: 1.05rem;">Flight details</h4>
                 <p style="margin: 4px 0; font-size: 0.85rem;"><strong>From:</strong> ${route.origin.name}</p>
                 <p style="margin: 4px 0; font-size: 0.85rem;"><strong>To:</strong> ${route.destination.name}</p>
-                <p style="margin: 4px 0; font-size: 0.85rem;"><strong>Price:</strong> <span style="color: var(--secondary); font-weight:600;">$${route.price}</span></p>
+                <p style="margin: 4px 0; font-size: 0.85rem;"><strong>Price:</strong> <span style="color: var(--secondary); font-weight:600;">€${route.price}</span></p>
                 <p style="margin: 4px 0; font-size: 0.85rem;"><strong>Departure:</strong> ${depTimeStr}</p>
                 <p style="margin: 4px 0; font-size: 0.85rem;"><strong>Arrival:</strong> ${arrTimeStr}</p>
             </div>
@@ -1323,7 +1358,7 @@ function renderItinerariesList() {
             </div>
 
             <div class="itinerary-footer">
-                <span class="itinerary-price">$${itin.price}</span>
+                <span class="itinerary-price">€${itin.price}</span>
                 <span class="itinerary-duration">
                     <i data-lucide="clock" style="width:14px; height:14px;"></i>
                     Total: ${totalDurationDays} days
@@ -2031,26 +2066,85 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            const originData = await getAirportCoords(parsed.originCode);
-            const destData = await getAirportCoords(parsed.destCode);
+            const stops = parsed.stopsCount || 0;
+            const legAirports = [parsed.originCode];
+            
+            for (let i = 0; i < stops; i++) {
+                const stopCode = prompt(`This flight from ${parsed.originCode} to ${parsed.destCode} has ${stops} stop(s).\nEnter the 3-letter airport code for Stop ${i + 1}:`);
+                if (!stopCode) {
+                    alert("Import cancelled. Airport code is required for stops.");
+                    return;
+                }
+                legAirports.push(stopCode.trim().toUpperCase());
+            }
+            legAirports.push(parsed.destCode);
 
-            if (!originData || !destData) {
-                alert(`Error: Coordinates for airport ${parsed.originCode} or ${parsed.destCode} could not be resolved.`);
-                return;
+            // Resolve all airport coordinates
+            const resolvedAirports = [];
+            for (const code of legAirports) {
+                const airportData = await getAirportCoords(code);
+                if (!airportData) {
+                    alert(`Error: Coordinates for airport ${code} could not be resolved.`);
+                    return;
+                }
+                resolvedAirports.push(airportData);
             }
 
             const colors = ["#6366f1", "#10b981", "#ec4899", "#f59e0b", "#06b6d4", "#a855f7"];
-            const color = colors[state.routes.length % colors.length];
 
-            addRoute(
-                originData,
-                destData,
-                parsed.departureTime,
-                parsed.arrivalTime,
-                120, // default price
-                color,
-                urlVal
-            );
+            if (stops === 0) {
+                const color = colors[state.routes.length % colors.length];
+                addRoute(
+                    resolvedAirports[0],
+                    resolvedAirports[1],
+                    parsed.departureTime,
+                    parsed.arrivalTime,
+                    120, // default price
+                    color,
+                    urlVal
+                );
+            } else {
+                // Determine timestamps
+                const totalStart = new Date(parsed.departureTime).getTime();
+                const totalEnd = new Date(parsed.arrivalTime).getTime();
+                const totalDuration = totalEnd - totalStart;
+                const numSegments = 2 * stops + 1;
+                const segmentDuration = totalDuration / numSegments;
+                
+                // Divide default price equally
+                const legPrice = Math.round(120 / (stops + 1));
+                
+                for (let i = 0; i < stops + 1; i++) {
+                    const legDepTimeMs = totalStart + (2 * i) * segmentDuration;
+                    const legArrTimeMs = totalStart + (2 * i + 1) * segmentDuration;
+                    
+                    const legColor = colors[(state.routes.length + i) % colors.length];
+                    
+                    const legRoute = {
+                        id: Date.now().toString() + Math.random().toString(36).substr(2, 5) + "_" + i,
+                        origin: resolvedAirports[i],
+                        destination: resolvedAirports[i + 1],
+                        departureTime: legDepTimeMs,
+                        arrivalTime: legArrTimeMs,
+                        price: legPrice,
+                        color: legColor,
+                        link: urlVal,
+                        soldOut: false,
+                        planeMarker: null
+                    };
+                    state.routes.push(legRoute);
+                }
+                
+                state.routes.sort((a, b) => a.departureTime - b.departureTime);
+                state.manualItineraries = findItineraries(state.routes);
+                state.selectedManualItineraryIndex = 0;
+                localStorage.setItem('weaver_selected_itinerary_index', 0);
+                
+                saveRoutesToLocalStorage();
+                renderManualItinerariesList();
+                renderRoutesList();
+                drawRoutesOnMap();
+            }
 
             importInput.value = '';
             renderItineraryDetails();
@@ -2581,18 +2675,18 @@ function showPriceUpdateModal(changes) {
             let priceHTML = '';
             if (change.status === 'sold-out') {
                 statusHTML = `<span class="price-change-status sold-out">SOLD OUT</span>`;
-                priceHTML = `<span class="price-change-old">$${change.oldPrice}</span>`;
+                priceHTML = `<span class="price-change-old">€${change.oldPrice}</span>`;
             } else if (change.status === 'price-up') {
-                statusHTML = `<span class="price-change-status price-up">+$${change.newPrice - change.oldPrice}</span>`;
+                statusHTML = `<span class="price-change-status price-up">+€${change.newPrice - change.oldPrice}</span>`;
                 priceHTML = `
-                    <span class="price-change-old">$${change.oldPrice}</span>
-                    <strong style="font-size: 0.9rem; color: var(--text-main); font-weight:700;">$${change.newPrice}</strong>
+                    <span class="price-change-old">€${change.oldPrice}</span>
+                    <strong style="font-size: 0.9rem; color: var(--text-main); font-weight:700;">€${change.newPrice}</strong>
                 `;
             } else if (change.status === 'price-down') {
-                statusHTML = `<span class="price-change-status price-down">-$${change.oldPrice - change.newPrice}</span>`;
+                statusHTML = `<span class="price-change-status price-down">-€${change.oldPrice - change.newPrice}</span>`;
                 priceHTML = `
-                    <span class="price-change-old">$${change.oldPrice}</span>
-                    <strong style="font-size: 0.9rem; color: var(--text-main); font-weight:700;">$${change.newPrice}</strong>
+                    <span class="price-change-old">€${change.oldPrice}</span>
+                    <strong style="font-size: 0.9rem; color: var(--text-main); font-weight:700;">€${change.newPrice}</strong>
                 `;
             }
 

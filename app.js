@@ -439,6 +439,8 @@ function setupModeToggle() {
                 if (leftManualContainer) leftManualContainer.classList.add('active');
                 if (leftExplorerContainer) leftExplorerContainer.classList.remove('active');
                 
+                closeEditPanel();
+                
                 map.removeLayer(explorerLayers);
                 map.addLayer(manualLayers);
                 
@@ -451,6 +453,12 @@ function setupModeToggle() {
                 if (leftExplorerContainer) leftExplorerContainer.classList.add('active');
                 if (leftManualContainer) leftManualContainer.classList.remove('active');
                 
+                if (state.itineraries.length === 0) {
+                    openEditPanel('explorer');
+                } else {
+                    closeEditPanel();
+                }
+                
                 map.removeLayer(manualLayers);
                 map.addLayer(explorerLayers);
                 
@@ -460,6 +468,35 @@ function setupModeToggle() {
             }
         });
     });
+}
+
+function openEditPanel(mode) {
+    const editPanel = document.getElementById('edit-panel');
+    const editManual = document.getElementById('edit-manual-container');
+    const editExplorer = document.getElementById('edit-explorer-container');
+    const title = document.getElementById('edit-panel-title');
+
+    if (!editPanel) return;
+
+    editPanel.classList.remove('collapsed');
+
+    if (mode === 'manual') {
+        if (title) title.textContent = "Network & Legs Editor";
+        if (editManual) editManual.classList.add('active');
+        if (editExplorer) editExplorer.classList.remove('active');
+    } else {
+        if (title) title.textContent = "Search Parameters";
+        if (editExplorer) editExplorer.classList.add('active');
+        if (editManual) editManual.classList.remove('active');
+    }
+    lucide.createIcons();
+}
+
+function closeEditPanel() {
+    const editPanel = document.getElementById('edit-panel');
+    if (editPanel) {
+        editPanel.classList.add('collapsed');
+    }
 }
 
 function renderManualItinerariesList() {
@@ -494,7 +531,12 @@ function renderManualItinerariesList() {
         card.innerHTML = `
             <div class="itinerary-card-header">
                 <span>Option ${index + 1}</span>
-                <span class="itinerary-card-badge">${stopsText}</span>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <span class="itinerary-card-badge">${stopsText}</span>
+                    <button class="btn-edit-itinerary" title="Edit Flights" style="background: transparent; border: none; color: var(--text-muted); cursor: pointer; padding: 2px; display: inline-flex; align-items: center; justify-content: center; transition: var(--transition);">
+                        <i data-lucide="edit-2" style="width: 14px; height: 14px;"></i>
+                    </button>
+                </div>
             </div>
             <div class="itinerary-card-path">
                 ${itin.pathString}
@@ -518,6 +560,20 @@ function renderManualItinerariesList() {
             // Re-draw timeline scale & bounds
             updateTimelineBounds();
         });
+
+        const editBtn = card.querySelector('.btn-edit-itinerary');
+        if (editBtn) {
+            editBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                
+                state.selectedManualItineraryIndex = index;
+                renderManualItinerariesList();
+                drawRoutesOnMap();
+                updateTimelineBounds();
+                
+                openEditPanel('manual');
+            });
+        }
 
         listContainer.appendChild(card);
     });
@@ -1640,21 +1696,31 @@ document.addEventListener('DOMContentLoaded', () => {
     lucide.createIcons();
     setupModeToggle();
 
-    // Toggle Sidebar fold/unfold state
-    const sidebar = document.getElementById('sidebar');
-    const toggleBtn = document.getElementById('sidebar-toggle');
-    if (sidebar && toggleBtn) {
-        toggleBtn.addEventListener('click', () => {
-            sidebar.classList.toggle('collapsed');
-        });
-    }
-
-    // Toggle Left Panel fold/unfold state
+    // Toggle Left Panel fold/unfold state (and auto-close edit panel if collapsed)
     const leftPanel = document.getElementById('left-panel');
     const leftToggleBtn = document.getElementById('left-panel-toggle');
     if (leftPanel && leftToggleBtn) {
         leftToggleBtn.addEventListener('click', () => {
-            leftPanel.classList.toggle('collapsed');
+            const isCollapsed = leftPanel.classList.toggle('collapsed');
+            if (isCollapsed) {
+                closeEditPanel();
+            }
+        });
+    }
+
+    // Edit Panel Close Button
+    const btnCloseEdit = document.getElementById('btn-close-edit-panel');
+    if (btnCloseEdit) {
+        btnCloseEdit.addEventListener('click', () => {
+            closeEditPanel();
+        });
+    }
+
+    // Explorer Configure Search params button
+    const btnConfigureSearch = document.getElementById('btn-configure-search');
+    if (btnConfigureSearch) {
+        btnConfigureSearch.addEventListener('click', () => {
+            openEditPanel('explorer');
         });
     }
 
@@ -1722,6 +1788,7 @@ document.addEventListener('DOMContentLoaded', () => {
             );
 
             importInput.value = '';
+            closeEditPanel();
         } catch (err) {
             console.error(err);
             alert("An error occurred while importing the Skyscanner link.");
@@ -1778,6 +1845,7 @@ document.addEventListener('DOMContentLoaded', () => {
         delete destInput.dataset.lat;
         delete destInput.dataset.lng;
         delete destInput.dataset.name;
+        closeEditPanel();
     });
 
     // --- Mode 2 Form Submit ---
@@ -1825,6 +1893,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         renderItinerariesList();
         updateTimelineBounds();
+        closeEditPanel();
     });
 
     // --- Timeline Controls Scrubber ---

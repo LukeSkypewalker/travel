@@ -19,10 +19,22 @@
 
         <!-- Left Panel for Calculated/Suggested Itineraries -->
         <aside id="left-panel">
+            <!-- Mode Toggle Tabs -->
+            <div class="mode-tabs">
+                <button class="mode-tab active" data-mode="manual">
+                    <i data-lucide="edit-3" style="width: 16px; height: 16px;"></i>
+                    Manual Planner
+                </button>
+                <button class="mode-tab" data-mode="explorer">
+                    <i data-lucide="sparkles" style="width: 16px; height: 16px;"></i>
+                    Route Explorer
+                </button>
+            </div>
+
             <div class="left-panel-content">
                 <!-- Mode 1: Computed Itineraries -->
                 <div id="left-manual-container" class="left-mode-container active">
-                    <section class="itinerary-options-section" style="padding: 20px;">
+                    <section class="itinerary-options-section" style="padding: 20px 20px 10px 20px;">
                         <div class="route-section-title">
                             <span>Computed Itineraries</span>
                             <span id="itinerary-option-count" style="font-size: 0.8rem; color: var(--text-muted);">0 options</span>
@@ -35,13 +47,42 @@
                             </div>
                         </div>
                     </section>
+
+                    <!-- Collapsible Raw Legs List (Moved to the left!) -->
+                    <section class="raw-flights-drawer" style="margin: 0 20px 20px 20px;">
+                        <button type="button" id="btn-toggle-raw-flights" class="drawer-toggle-btn">
+                            <span><i data-lucide="database" style="width: 14px; height: 14px; display: inline-block; vertical-align: middle; margin-right: 4px;"></i> Manage Individual Legs</span>
+                            <i data-lucide="chevron-down" id="raw-flights-chevron" style="width: 14px; height: 14px; transition: transform 0.3s;"></i>
+                        </button>
+                        <div id="raw-flights-container" class="drawer-content collapsed">
+                            <div class="route-section-title" style="margin: 12px 0 6px 0;">
+                                <span>All Legs in Network</span>
+                                <span id="route-count" style="font-size: 0.8rem; color: var(--text-muted);">0 legs</span>
+                            </div>
+                            <div id="routes-list" class="routes-list">
+                                <!-- Dynamically populated raw legs -->
+                                <div class="empty-state">
+                                    <i data-lucide="map-pin" style="width: 32px; height: 32px;"></i>
+                                    <p>No legs added yet.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
                 </div>
 
                 <!-- Mode 2: Suggested Stopovers -->
                 <div id="left-explorer-container" class="left-mode-container">
                     <section style="padding: 20px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                            <span class="route-section-title" style="margin: 0;">Suggested Stopovers</span>
+                            <button type="button" id="btn-configure-search" class="btn btn-secondary" style="padding: 6px 12px; font-size: 0.78rem; gap: 4px; display: inline-flex; align-items: center; border-radius: 6px;">
+                                <i data-lucide="sliders" style="width: 12px; height: 12px;"></i>
+                                Search Params
+                            </button>
+                        </div>
+                        
                         <div class="route-section-title">
-                            <span>Suggested Stopovers</span>
+                            <span>Results</span>
                             <span id="itinerary-count" style="font-size: 0.8rem; color: var(--text-muted);">0 routes</span>
                         </div>
                         <div id="itineraries-list" class="routes-list">
@@ -59,23 +100,17 @@
             <i data-lucide="chevron-left"></i>
         </button>
 
-        <!-- Sidebar Panel for Configuration & List -->
-        <aside id="sidebar">
-            <!-- Mode Toggle Tabs -->
-            <div class="mode-tabs">
-                <button class="mode-tab active" data-mode="manual">
-                    <i data-lucide="edit-3" style="width: 16px; height: 16px;"></i>
-                    Manual Planner
-                </button>
-                <button class="mode-tab" data-mode="explorer">
-                    <i data-lucide="sparkles" style="width: 16px; height: 16px;"></i>
-                    Route Explorer
+        <!-- Second Panel (Slide-out Editor/Configurator next to Left Panel) -->
+        <aside id="edit-panel" class="collapsed">
+            <div class="edit-panel-header">
+                <h3 id="edit-panel-title">Edit Itinerary</h3>
+                <button type="button" id="btn-close-edit-panel" class="close-btn" title="Close Panel">
+                    <i data-lucide="x" style="width: 16px; height: 16px;"></i>
                 </button>
             </div>
-
-            <div class="sidebar-content">
-                <!-- Mode 1: Manual Planner Container -->
-                <div id="mode-manual-container" class="mode-container active">
+            <div class="edit-panel-content">
+                <!-- Mode 1 Editor Content -->
+                <div id="edit-manual-container" class="edit-mode-container active">
                     <!-- Skyscanner Importer -->
                     <section class="form-section" style="margin-bottom: 0px;">
                         <div class="form-group" style="margin-bottom: 12px;">
@@ -99,7 +134,6 @@
                     <!-- Add Route Form -->
                     <section class="form-section">
                         <form id="route-form">
-                            <!-- Origin Input -->
                             <div class="form-group autocomplete-container">
                                 <label for="origin-input">Departure City / Airport</label>
                                 <div class="input-container">
@@ -109,7 +143,6 @@
                                 <div id="origin-suggestions" class="suggestions-list" style="display: none;"></div>
                             </div>
 
-                            <!-- Destination Input -->
                             <div class="form-group autocomplete-container">
                                 <label for="destination-input">Arrival City / Airport</label>
                                 <div class="input-container">
@@ -119,7 +152,6 @@
                                 <div id="destination-suggestions" class="suggestions-list" style="display: none;"></div>
                             </div>
 
-                            <!-- Departure & Arrival Date/Time -->
                             <div class="form-row">
                                 <div class="form-group">
                                     <label for="departure-time">Departure Time</label>
@@ -137,7 +169,6 @@
                                 </div>
                             </div>
 
-                            <!-- Price & Color Picker -->
                             <div class="form-row">
                                 <div class="form-group">
                                     <label for="route-price">Price ($)</label>
@@ -167,49 +198,23 @@
                             </button>
                         </form>
                     </section>
-
-
-
-                    <!-- Collapsible Raw Legs List -->
-                    <section class="raw-flights-drawer" style="margin-top: 15px;">
-                        <button type="button" id="btn-toggle-raw-flights" class="drawer-toggle-btn">
-                            <span><i data-lucide="database" style="width: 14px; height: 14px; display: inline-block; vertical-align: middle; margin-right: 4px;"></i> Manage Individual Legs</span>
-                            <i data-lucide="chevron-down" id="raw-flights-chevron" style="width: 14px; height: 14px; transition: transform 0.3s;"></i>
-                        </button>
-                        <div id="raw-flights-container" class="drawer-content collapsed">
-                            <div class="route-section-title" style="margin: 12px 0 6px 0;">
-                                <span>All Legs in Network</span>
-                                <span id="route-count" style="font-size: 0.8rem; color: var(--text-muted);">0 legs</span>
-                            </div>
-                            <div id="routes-list" class="routes-list">
-                                <!-- Dynamically populated raw legs -->
-                                <div class="empty-state">
-                                    <i data-lucide="map-pin" style="width: 32px; height: 32px;"></i>
-                                    <p>No legs added yet.</p>
-                                </div>
-                            </div>
-                        </div>
-                    </section>
                 </div>
 
-                <!-- Mode 2: Route Explorer Container -->
-                <div id="mode-explorer-container" class="mode-container">
-                    <!-- Route Explorer Form -->
+                <!-- Mode 2 Editor Content -->
+                <div id="edit-explorer-container" class="edit-mode-container">
                     <section class="form-section">
                         <form id="explorer-form">
-                            <!-- Origin Input -->
                             <div class="form-group autocomplete-container">
-                                <label for="explorer-origin-input">Starting City / Airport</label>
+                                <label for="explorer-origin-input">Origin City / Airport</label>
                                 <div class="input-container">
                                     <i data-lucide="plane-departure" class="input-icon"></i>
-                                    <input type="text" id="explorer-origin-input" placeholder="Search departure..." required autocomplete="off">
+                                    <input type="text" id="explorer-origin-input" placeholder="Search origin location..." required autocomplete="off">
                                 </div>
                                 <div id="explorer-origin-suggestions" class="suggestions-list" style="display: none;"></div>
                             </div>
 
-                            <!-- Destination Input -->
                             <div class="form-group autocomplete-container">
-                                <label for="explorer-destination-input">Destination City / Airport</label>
+                                <label for="explorer-destination-input">Final Destination</label>
                                 <div class="input-container">
                                     <i data-lucide="plane-arrival" class="input-icon"></i>
                                     <input type="text" id="explorer-destination-input" placeholder="Search destination..." required autocomplete="off">
@@ -217,7 +222,6 @@
                                 <div id="explorer-destination-suggestions" class="suggestions-list" style="display: none;"></div>
                             </div>
 
-                            <!-- Dates -->
                             <div class="form-row">
                                 <div class="form-group">
                                     <label for="explorer-start-date">Earliest Start Date</label>
@@ -235,7 +239,6 @@
                                 </div>
                             </div>
 
-                            <!-- Budget -->
                             <div class="form-group">
                                 <label for="explorer-budget">Max Budget ($)</label>
                                 <div class="input-container">
@@ -249,15 +252,9 @@
                             </button>
                         </form>
                     </section>
-
-
                 </div>
             </div>
         </aside>
-        
-        <button id="sidebar-toggle" aria-label="Toggle Sidebar" title="Collapse/Expand Panel">
-            <i data-lucide="chevron-right"></i>
-        </button>
 
         <!-- Bottom Timeline Slider and Playback Controls -->
         <div id="timeline-container">
